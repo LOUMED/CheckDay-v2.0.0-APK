@@ -1,0 +1,11 @@
+{
+  "appId": "ma.mrm19.checkday",
+  "appName": "CheckDay",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#0B1D3A"
+  }
+}

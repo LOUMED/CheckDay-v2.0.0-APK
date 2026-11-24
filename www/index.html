@@ -1,0 +1,3954 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0B1D3A" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>CheckDay</title>
+
+  <!-- Fonts: Cairo (Arabic), Plus Jakarta Sans (Latin), JetBrains Mono (Numbers & Clocks) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Flaticon Solid Rounded Icons -->
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/2.6.0/uicons-solid-rounded/css/uicons-solid-rounded.css" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              950: '#071326',
+              900: '#0B1D3A',
+              800: '#163466',
+              700: '#1E4582',
+            },
+            emerald: {
+              brand: '#00C29A',
+              dark: '#009E7D',
+              mint: '#6EE7D2',
+            },
+            surface: '#EEF2F7',
+          },
+          boxShadow: {
+            card: '0 8px 28px rgba(11, 29, 58, 0.06)',
+            nav: '0 12px 36px rgba(11, 29, 58, 0.14)',
+            hero: '0 16px 40px rgba(11, 29, 58, 0.22)',
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- React 18, Babel, Supabase JS v2, SheetJS -->
+  <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    :root {
+      --bg-surface: #EEF2F7;
+      --navy-900: #0B1D3A;
+      --emerald-brand: #00C29A;
+    }
+
+    * {
+      -webkit-tap-highlight-color: transparent;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-surface);
+      color: #0B1D3A;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .font-ar { font-family: 'Cairo', sans-serif; }
+    .font-latin { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .font-mono-num {
+      font-family: 'JetBrains Mono', monospace;
+      direction: ltr;
+      unicode-bidi: isolate;
+      font-variant-numeric: tabular-nums;
+      display: inline-block;
+    }
+
+    .hero-gradient {
+      background: linear-gradient(135deg, #0B1D3A 0%, #163466 55%, #0D525E 100%);
+    }
+
+    .fintech-card {
+      background: #FFFFFF;
+      border-radius: 22px;
+      border: 1px solid rgba(226, 232, 240, 0.85);
+      box-shadow: 0 8px 28px rgba(11, 29, 58, 0.06);
+    }
+
+    .glass-nav {
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      box-shadow: 0 12px 36px rgba(11, 29, 58, 0.14);
+    }
+
+    @keyframes fadeSlideUp {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-fade-up {
+      animation: fadeSlideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes pulseRing {
+      0% { transform: scale(0.92); opacity: 0.9; }
+      50% { transform: scale(1.06); opacity: 0.4; }
+      100% { transform: scale(0.92); opacity: 0.9; }
+    }
+
+    .loader-ring {
+      animation: pulseRing 1s ease-in-out infinite;
+    }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Print styling for Payslip */
+    @media print {
+      body * { visibility: hidden; }
+      #printable-payslip, #printable-payslip * { visibility: visible; }
+      #printable-payslip {
+        position: fixed;
+        inset: 0;
+        background: #FFFFFF;
+        padding: 24px;
+        box-shadow: none !important;
+        border: none !important;
+      }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+    /* =========================================================================
+       1. CONFIGURATION & SILENT CLOUD CLIENT
+       Replace the two values below with your Supabase Project URL and Anon Key.
+       ========================================================================= */
+    const SUPABASE_URL = 'https://lpnxqiurubwcqmmbonvs.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_XrbwvPo5The2UW4g89MmkQ_2VQSKUmJ';
+    const APP_VERSION = '2.0.0';
+
+    const isCloudConfigured = () =>
+      SUPABASE_URL.startsWith('https://') &&
+      !SUPABASE_URL.includes('YOUR_PROJECT_REF') &&
+      SUPABASE_ANON_KEY.length > 20 &&
+      !SUPABASE_ANON_KEY.includes('YOUR_SUPABASE_ANON_KEY');
+
+    const supabaseClient =
+      isCloudConfigured() && window.supabase
+        ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+          })
+        : null;
+
+    /* =========================================================================
+       2. SAFE STORAGE & OFFLINE SYNC QUEUE
+       ========================================================================= */
+    const Storage = {
+      get(key, fallback = null) {
+        try {
+          const raw = localStorage.getItem(key);
+          return raw ? JSON.parse(raw) : fallback;
+        } catch {
+          return fallback;
+        }
+      },
+      set(key, value) {
+        try {
+          localStorage.setItem(key, JSON.stringify(value));
+        } catch {}
+      },
+      remove(key) {
+        try {
+          localStorage.removeItem(key);
+        } catch {}
+      },
+    };
+
+    const KEYS = {
+      LANG: 'checkday_lang_v2',
+      PROFILE: 'checkday_profile_v2',
+      RECORDS: 'checkday_records_v2',
+      BONUSES: 'checkday_bonuses_v2',
+      PAYROLL: 'checkday_payroll_v2',
+      PIN_HASH: 'checkday_pin_hash_v2',
+      SOUND_MUTED: 'checkday_sound_muted_v2',
+      SYNC_QUEUE: 'checkday_sync_queue_v2',
+      HOLIDAYS: 'checkday_holidays_v2',
+      ANNOUNCEMENTS: 'checkday_announcements_v2',
+      CONFIG: 'checkday_config_v2',
+    };
+
+    async function hashPin(pin) {
+      try {
+        const enc = new TextEncoder().encode('checkday_salt_' + pin);
+        const buf = await crypto.subtle.digest('SHA-256', enc);
+        return Array.from(new Uint8Array(buf))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
+      } catch {
+        return btoa('checkday_salt_' + pin);
+      }
+    }
+
+    const SilentSync = {
+      enqueue(action) {
+        const q = Storage.get(KEYS.SYNC_QUEUE, []);
+        q.push({ ...action, ts: Date.now() });
+        Storage.set(KEYS.SYNC_QUEUE, q);
+        this.flush();
+      },
+      async flush() {
+        if (!supabaseClient || !navigator.onLine) return;
+        const q = Storage.get(KEYS.SYNC_QUEUE, []);
+        if (!q.length) return;
+        const remaining = [];
+        for (const item of q) {
+          try {
+            if (item.type === 'upsert_profile') {
+              await supabaseClient.from('profiles').upsert(item.payload, { onConflict: 'id' });
+            } else if (item.type === 'upsert_attendance') {
+              await supabaseClient
+                .from('attendance_records')
+                .upsert(item.payload, { onConflict: 'user_id,work_date' });
+            } else if (item.type === 'delete_attendance') {
+              await supabaseClient
+                .from('attendance_records')
+                .delete()
+                .eq('user_id', item.payload.user_id)
+                .eq('work_date', item.payload.work_date);
+            } else if (item.type === 'upsert_bonus') {
+              await supabaseClient.from('bonuses').upsert(item.payload, { onConflict: 'id' });
+            } else if (item.type === 'delete_bonus') {
+              await supabaseClient.from('bonuses').delete().eq('id', item.payload.id);
+            } else if (item.type === 'upsert_payroll') {
+              await supabaseClient
+                .from('payroll_settings')
+                .upsert(item.payload, { onConflict: 'user_id' });
+            }
+          } catch {
+            remaining.push(item);
+          }
+        }
+        Storage.set(KEYS.SYNC_QUEUE, remaining);
+      },
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => SilentSync.flush());
+    }
+
+    /* =========================================================================
+       3. ORGANIC WEB AUDIO API SOUND ENGINE (Zero harsh beeps)
+       ========================================================================= */
+    class OrganicSoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.muted = Storage.get(KEYS.SOUND_MUTED, false);
+      }
+
+      ensureContext() {
+        if (this.muted) return null;
+        try {
+          if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return null;
+            this.ctx = new AudioCtx();
+          }
+          if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+          }
+          return this.ctx;
+        } catch {
+          return null;
+        }
+      }
+
+      setMuted(val) {
+        this.muted = val;
+        Storage.set(KEYS.SOUND_MUTED, val);
+      }
+
+      playTone(freq, startOffset, duration, type = 'sine', peakGain = 0.08, cutoff = 1400) {
+        const ctx = this.ensureContext();
+        if (!ctx) return;
+        const now = ctx.currentTime + startOffset;
+        const osc = ctx.createOscillator();
+        const filter = ctx.createBiquadFilter();
+        const gain = ctx.createGain();
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, now);
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(cutoff, now);
+        filter.Q.setValueAtTime(1.2, now);
+
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(peakGain, now + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + duration + 0.02);
+      }
+
+      play(kind) {
+        if (this.muted) return;
+        switch (kind) {
+          case 'tap':
+            // Soft marimba-like wooden tick
+            this.playTone(420, 0, 0.065, 'triangle', 0.06, 1100);
+            break;
+          case 'nav':
+            // Airy soft glide
+            this.playTone(330, 0, 0.08, 'sine', 0.05, 950);
+            this.playTone(440, 0.035, 0.09, 'sine', 0.045, 1100);
+            break;
+          case 'success':
+            // Warm kalimba triad (C5 - E5 - G5)
+            this.playTone(523.25, 0, 0.22, 'triangle', 0.075, 1600);
+            this.playTone(659.25, 0.065, 0.24, 'triangle', 0.07, 1700);
+            this.playTone(783.99, 0.13, 0.32, 'sine', 0.08, 1900);
+            break;
+          case 'coin':
+            // Crystal chime (A5 -> E6)
+            this.playTone(880, 0, 0.16, 'sine', 0.06, 2200);
+            this.playTone(1318.5, 0.07, 0.34, 'sine', 0.065, 2600);
+            break;
+          case 'absent':
+            // Soft woody double-tap
+            this.playTone(210, 0, 0.085, 'triangle', 0.07, 650);
+            this.playTone(170, 0.095, 0.11, 'triangle', 0.065, 550);
+            break;
+          default:
+            break;
+        }
+      }
+    }
+
+    const soundEngine = new OrganicSoundEngine();
+
+    /* =========================================================================
+       4. MOROCCO TIME & 18-TO-17 PAYROLL CYCLE UTILITIES
+       ========================================================================= */
+    function getMoroccoDateParts(dateObj = new Date()) {
+      const fmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Africa/Casablanca',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      });
+      const parts = {};
+      for (const p of fmt.formatToParts(dateObj)) {
+        parts[p.type] = p.value;
+      }
+      const hour = parts.hour === '24' ? '00' : parts.hour;
+      return {
+        year: Number(parts.year),
+        month: Number(parts.month),
+        day: Number(parts.day),
+        iso: `${parts.year}-${parts.month}-${parts.day}`,
+        time: `${hour}:${parts.minute}:${parts.second}`,
+      };
+    }
+
+    function parseIsoDate(iso) {
+      const [y, m, d] = iso.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    }
+
+    function toIsoDate(utcDate) {
+      const y = utcDate.getUTCFullYear();
+      const m = String(utcDate.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(utcDate.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function getDayOfWeek(iso) {
+      // 0 = Sunday, 5 = Friday, 6 = Saturday
+      return parseIsoDate(iso).getUTCDay();
+    }
+
+    function getCycleRange(referenceIso) {
+      const [y, m, d] = referenceIso.split('-').map(Number);
+      let startY = y, startM = m;
+      let endY = y, endM = m;
+      if (d >= 18) {
+        // 18th of current month to 17th of next month
+        if (m === 12) {
+          endY = y + 1;
+          endM = 1;
+        } else {
+          endM = m + 1;
+        }
+      } else {
+        // 18th of previous month to 17th of current month
+        if (m === 1) {
+          startY = y - 1;
+          startM = 12;
+        } else {
+          startM = m - 1;
+        }
+      }
+      const startIso = `${startY}-${String(startM).padStart(2, '0')}-18`;
+      const endIso = `${endY}-${String(endM).padStart(2, '0')}-17`;
+      const cycleKey = `${endY}-${String(endM).padStart(2, '0')}`;
+
+      const days = [];
+      const cursor = parseIsoDate(startIso);
+      const endDate = parseIsoDate(endIso);
+      while (cursor <= endDate) {
+        days.push(toIsoDate(cursor));
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+      return { startIso, endIso, cycleKey, days };
+    }
+
+    function calcTimeDurationHours(startTime, endTime) {
+      const [sh, sm] = startTime.split(':').map(Number);
+      const [eh, em] = endTime.split(':').map(Number);
+      let diff = eh * 60 + em - (sh * 60 + sm);
+      if (diff <= 0) diff += 24 * 60;
+      // For standard Shift Normal (08:30 -> 17:30 = 9h span including 1h lunch break = 8h paid)
+      const rawHours = diff / 60;
+      if (startTime === '08:30' && rawHours >= 8.5) {
+        return Math.max(0.5, Number((rawHours - 1).toFixed(2)));
+      }
+      return Math.max(0.5, Number(rawHours.toFixed(2)));
+    }
+
+    const DEFAULT_HOLIDAYS = [
+      { holiday_date: '2026-01-01', name_ar: 'رأس السنة الميلادية', name_fr: 'Nouvel An', name_en: "New Year's Day", multiplier: 2 },
+      { holiday_date: '2026-01-11', name_ar: 'تقديم وثيقة الاستقلال', name_fr: "Manifeste de l'Indépendance", name_en: 'Independence Manifesto Day', multiplier: 2 },
+      { holiday_date: '2026-01-14', name_ar: 'رأس السنة الأمازيغية', name_fr: 'Nouvel An Amazigh', name_en: 'Amazigh New Year', multiplier: 2 },
+      { holiday_date: '2026-03-20', name_ar: 'عيد الفطر', name_fr: 'Aïd El Fitr', name_en: 'Eid al-Fitr', multiplier: 2 },
+      { holiday_date: '2026-05-01', name_ar: 'عيد الشغل', name_fr: 'Fête du Travail', name_en: 'Labour Day', multiplier: 2 },
+      { holiday_date: '2026-05-27', name_ar: 'عيد الأضحى', name_fr: 'Aïd El Adha', name_en: 'Eid al-Adha', multiplier: 2 },
+      { holiday_date: '2026-06-17', name_ar: 'فاتح محرم', name_fr: '1er Moharram', name_en: 'Islamic New Year', multiplier: 2 },
+      { holiday_date: '2026-07-30', name_ar: 'عيد العرش', name_fr: 'Fête du Trône', name_en: 'Throne Day', multiplier: 2 },
+      { holiday_date: '2026-08-14', name_ar: 'ذكرى استرجاع وادي الذهب', name_fr: 'Allégeance Oued Eddahab', name_en: 'Oued Ed-Dahab Day', multiplier: 2 },
+      { holiday_date: '2026-08-20', name_ar: 'ثورة الملك والشعب', name_fr: 'Révolution du Roi et du Peuple', name_en: 'Revolution Day', multiplier: 2 },
+      { holiday_date: '2026-08-21', name_ar: 'عيد الشباب', name_fr: 'Fête de la Jeunesse', name_en: 'Youth Day', multiplier: 2 },
+      { holiday_date: '2026-08-26', name_ar: 'عيد المولد النبوي', name_fr: 'Aïd Al Mawlid', name_en: "Prophet's Birthday", multiplier: 2 },
+      { holiday_date: '2026-11-06', name_ar: 'ذكرى المسيرة الخضراء', name_fr: 'Marche Verte', name_en: 'Green March Day', multiplier: 2 },
+      { holiday_date: '2026-11-18', name_ar: 'عيد الاستقلال', name_fr: "Fête de l'Indépendance", name_en: 'Independence Day', multiplier: 2 },
+      { holiday_date: '2027-01-01', name_ar: 'رأس السنة الميلادية', name_fr: 'Nouvel An', name_en: "New Year's Day", multiplier: 2 },
+      { holiday_date: '2027-01-11', name_ar: 'تقديم وثيقة الاستقلال', name_fr: "Manifeste de l'Indépendance", name_en: 'Independence Manifesto Day', multiplier: 2 },
+      { holiday_date: '2027-01-14', name_ar: 'رأس السنة الأمازيغية', name_fr: 'Nouvel An Amazigh', name_en: 'Amazigh New Year', multiplier: 2 },
+      { holiday_date: '2027-05-01', name_ar: 'عيد الشغل', name_fr: 'Fête du Travail', name_en: 'Labour Day', multiplier: 2 },
+    ];
+
+    const DEFAULT_CONFIG = {
+      maintenance_mode: false,
+      maintenance_message_ar: 'التطبيق في صيانة مؤقتة، يرجى المحاولة لاحقاً.',
+      maintenance_message_fr: 'Application en maintenance temporaire, veuillez réessayer plus tard.',
+      maintenance_message_en: 'App is under temporary maintenance, please try again later.',
+      force_update: false,
+      min_version: '2.0.0',
+      update_url: '',
+      default_anapec_rate: 131.64,
+      default_cdd_cdi_rate: 143.36,
+      sunday_multiplier: 1.5,
+      holiday_multiplier: 2.0,
+    };
+
+    /* =========================================================================
+       5. STRICT 100% PURE MULTI-LANGUAGE DICTIONARY (AR / FR / EN)
+       ========================================================================= */
+    const I18N = {
+      ar: {
+        dir: 'rtl',
+        fontClass: 'font-ar',
+        currency: 'درهم',
+        appTagline: 'متابعة الحضور والأجر بدقة',
+        loading: 'جاري التحميل...',
+        weekdaysShort: ['أح', 'إث', 'ثل', 'أر', 'خم', 'جم', 'سب'],
+        // Auth & Registration
+        welcomeTitle: 'مرحباً بك في CheckDay',
+        welcomeSub: 'سجّل حضورك، تتبع مناوباتك، واحسب أجرك الصافي بكل سهولة',
+        signInGoogle: 'المتابعة بحساب جوجل',
+        signInPhone: 'تسجيل الدخول برقم الهاتف',
+        phonePlaceholder: '06XXXXXXXX',
+        sendOtp: 'دخول بحسابي',
+        createPhoneAccount: 'إنشاء حساب جديد',
+        phoneLoginTab: 'تسجيل الدخول',
+        phoneRegisterTab: 'حساب جديد',
+        passwordLabel: 'كلمة السر (6 أحرف على الأقل)',
+        passwordPlaceholder: '••••••••',
+        authErrorGeneric: 'تحقق من رقم الهاتف وكلمة السر وحاول مجدداً',
+        backBtn: 'رجوع',
+        pinUnlockTitle: 'أدخل رمز القفل الشخصي',
+        pinUnlockSub: 'لفتح التطبيق وحماية بياناتك',
+        pinWrong: 'الرمز غير صحيح، حاول مجدداً',
+        pinClear: 'مسح',
+        setupTitle: 'إعداد ملف العامل',
+        setupSub: 'تُحدَّد فئة الشفت مرة واحدة عند التسجيل',
+        fullName: 'الاسم الكامل',
+        fullNamePh: 'مثال: محمد الوكيلي',
+        matricule: 'رقم التسجيل',
+        matriculePh: 'مثال: 10482',
+        contractType: 'نوع العقد',
+        contracts: {
+          ANAPEC: 'عقد أنابيك',
+          CDD: 'عقد محدد المدة',
+          CDI: 'عقد غير محدد المدة',
+          AUTRE: 'عقد آخر',
+        },
+        dailyRate8h: 'الأجر اليومي (8 ساعات)',
+        hourlyRate: 'أجر الساعة',
+        shiftCategory: 'فئة الشفت',
+        shiftLockedNote: 'يُثبّت الشفت عند إنشاء الحساب ولا يمكن تغييره لاحقاً',
+        shifts: {
+          normal: 'الشفت نورمال',
+          A: 'الشفت A',
+          B: 'الشفت B',
+          C: 'الشفت C',
+        },
+        completeSetup: 'حفظ والبدء الآن',
+        // Bottom Nav
+        nav: {
+          record: 'التسجيل',
+          history: 'السجل',
+          wallet: 'المحفظة',
+          payroll: 'الأجر',
+          bonuses: 'المنح',
+        },
+        // Record Tab
+        cycleLabel: 'الدورة الشهرية',
+        moroccoTime: 'توقيت المغرب',
+        dayEstimate: 'تقدير اليوم',
+        selectedDate: 'التاريخ المحدد',
+        todayBadge: 'اليوم',
+        futureLockedToast: 'لا يمكن تسجيل أيام مستقبلية قبل حلول تاريخها',
+        holidayBanner: 'عطلة رسمية مغربية — يُحتسب الأجر مضاعفاً',
+        fridayFlexBanner: 'يوم الجمعة — يمكنك تعديل وقت الخروج بحرية',
+        saturdayFlexBanner: 'يوم السبت — يمكنك تعديل وقت الخروج بحرية',
+        sundayBanner: 'يوم الأحد — تعويض خاص ليوم الراحة',
+        shift12hBanner: 'مناوبة 12 ساعة — تشمل الساعات الإضافية',
+        chooseShift: 'اختر نظام اليوم',
+        shiftNormal8h: 'يوم عادي (8 ساعات)',
+        shiftMorning: 'صباحي (06:00 - 14:00)',
+        shiftAfternoon: 'مسائي (14:00 - 22:00)',
+        shiftNight: 'ليلي (22:00 - 06:00)',
+        shift12h: 'مناوبة 12 ساعة',
+        shiftCustom: 'ساعات مخصصة',
+        exitTimeLabel: 'وقت الخروج',
+        customHoursLabel: 'عدد الساعات المشتغلة',
+        markPresent: 'تسجيل الحضور',
+        markAbsent: 'تسجيل غياب',
+        dayRecordedPresent: 'تم تسجيل هذا اليوم كـ حاضر',
+        dayRecordedAbsent: 'تم تسجيل هذا اليوم كـ غائب',
+        undoAbsence: 'إلغاء الغياب',
+        switchToPresent: 'تحويل إلى حضور',
+        updateRecord: 'تحديث التسجيل',
+        deleteRecord: 'حذف اليوم',
+        cycleCalendarTitle: 'تقويم الدورة (18 إلى 17)',
+        legendPresent: 'حضور',
+        legendAbsent: 'غياب',
+        legendHoliday: 'عطلة رسمية',
+        legendLocked: 'مقفل',
+        // History Tab
+        historyTitle: 'سجل الحضور',
+        currentCycle: 'الدورة الحالية',
+        allRecords: 'كل السجلات',
+        filters: {
+          all: 'الكل',
+          unpaid: 'غير مدفوع',
+          paid: 'مدفوع',
+          sunday: 'الأحد',
+          long: '12 ساعة / مخصص',
+          h8: '8 ساعات',
+          holiday: 'عطل رسمية',
+          absent: 'غياب',
+        },
+        paidStatus: 'مدفوع',
+        unpaidStatus: 'غير مدفوع',
+        absentLabel: 'غائب',
+        hoursUnit: 'ساعة',
+        noRecords: 'لا توجد تسجيلات مطابقة لهذا الفلتر',
+        editDay: 'تعديل',
+        removeDay: 'حذف',
+        // Wallet Tab
+        walletTitle: 'محفظة المستحقات',
+        grossTotal: 'إجمالي المستحقات',
+        paidTotal: 'المدفوع',
+        remainingTotal: 'المتبقي',
+        categoryBreakdown: 'التفصيل حسب الفئة',
+        catHoliday: 'أيام العطل الرسمية (×2)',
+        catSunday: 'أيام الأحد',
+        catLong: 'مناوبات 12 ساعة والمخصصة',
+        catNormal: 'الأيام العادية (8 ساعات)',
+        catBonuses: 'المنح والمكافآت',
+        daysUnit: 'يوم',
+        // Payroll Tab
+        payrollTitle: 'حساب الأجر الصافي',
+        openSimulator: 'فتح محاكي الأجر',
+        rateSettings: 'إعدادات الأجر',
+        salaryAdvance: 'التسبيق على الأجر',
+        cnssLabel: 'الضمان الاجتماعي (4.48% بسقف 6000)',
+        amoLabel: 'التأمين الإجباري عن المرض (2.26%)',
+        grossWork: 'أجر أيام العمل',
+        bonusesReceived: 'المنح المستلمة',
+        totalGross: 'الأجر الإجمالي',
+        cnssDeduction: 'اقتطاع الضمان الاجتماعي',
+        amoDeduction: 'اقتطاع التأمين عن المرض',
+        advanceDeduction: 'التسبيق',
+        netToPay: 'الصافي للأداء',
+        printPayslip: 'طباعة ورقة الأجر',
+        payslipTitle: 'كشف الأجر التقديري',
+        closeBtn: 'إغلاق',
+        printNow: 'طباعة الآن',
+        // Simulator Screen
+        simTitle: 'محاكي الأجر والاقتطاعات',
+        simSubtitle: 'احسب أثَر الغياب والتسبيقات والاقتطاعات على أجرك المتوقع',
+        simTargetGross: 'الأجر الإجمالي المتوقع',
+        simAbsenceDays: 'عدد أيام الغياب',
+        simAdvance: 'التسبيقات على الأجر',
+        simCustomDed: 'اقتطاعات أخرى',
+        simTotalDed: 'مجموع الاقتطاعات',
+        simNetRemaining: 'الأجر الصافي المتبقي',
+        simAbsenceCost: 'خصم الغياب',
+        // Bonuses Tab
+        bonusesTitle: 'المنح والمكافآت',
+        expectedLabel: 'المتوقع',
+        receivedLabel: 'المستلم',
+        missingLabel: 'المتبقي',
+        addBonusTitle: 'إضافة منحة جديدة',
+        bonusCategory: 'نوع المنحة',
+        bonusCategories: {
+          attendance: 'منحة المواظبة',
+          transport: 'منحة التنقل',
+          meal: 'منحة السلة والوجبة',
+          productivity: 'منحة المردودية',
+          seniority: 'منحة الأقدمية',
+          custom: 'منحة مخصصة',
+        },
+        bonusNamePh: 'اسم المنحة المخصصة',
+        addBonusBtn: 'إضافة المنحة',
+        noBonuses: 'لم تضف أي منح لهذه الدورة بعد',
+        markReceived: 'تأكيد الاستلام',
+        // Drawer Menu
+        menuTitle: 'القائمة الرئيسية',
+        menuSimulator: 'محاكي الأجر',
+        menuFaq: 'قوانين الخدمة والأسئلة العامة',
+        menuAbout: 'نبذة عن التطبيق',
+        menuPinLock: 'قفل التطبيق برمز سري',
+        pinEnabled: 'مفعّل',
+        pinDisabled: 'غير مفعّل',
+        menuExportExcel: 'تصدير إكسل للدورة الحالية',
+        menuSound: 'المؤثرات الصوتية',
+        soundTester: 'تجربة الأصوات',
+        soundBtns: {
+          tap: 'نقرة',
+          success: 'نجاح',
+          coin: 'مكافأة',
+          absent: 'غياب',
+        },
+        languageLabel: 'اللغة',
+        logoutBtn: 'تسجيل الخروج',
+        // PIN Modal
+        pinModalTitle: 'إعداد رمز القفل الشخصي',
+        pinEnter4: 'أدخل رمزاً مكوناً من 4 أرقام',
+        pinSave: 'حفظ القفل',
+        pinRemove: 'إلغاء القفل',
+        // FAQ Screen
+        faqTitle: 'قوانين الخدمة والأسئلة العامة',
+        faqs: [
+          {
+            q: 'كيف تُحتسب الدورة الشهرية من 18 إلى 17؟',
+            a: 'تبدأ دورة احتساب الأجر في اليوم 18 من كل شهر وتنتهي في اليوم 17 من الشهر الموالي. جميع أيام الحضور والغياب والمنح المسجلة ضمن هذه الفترة تُجمع تلقائياً في كشف أجر واحد.',
+          },
+          {
+            q: 'ما الفرق بين مناوبة 8 ساعات ومناوبة 12 ساعة؟',
+            a: 'اليوم العادي يُحتسب على أساس 8 ساعات عمل بأجرك اليومي الأساسي. عند العمل 12 ساعة، تُضاف الساعات الإضافية فوق 8 ساعات تلقائياً إلى مستحقات اليوم.',
+          },
+          {
+            q: 'كيف يُحتسب العمل يوم الأحد؟',
+            a: 'يُعد يوم الأحد يوم راحة أسبوعية، وعند العمل فيه يُطبَّق معامل زيادة خاص على الأجر اليومي (افتراضياً ×1.5) مع فصله بوضوح في المحفظة دون تكرار الحساب.',
+          },
+          {
+            q: 'كيف تُحتسب العطل الرسمية المغربية (×2)؟',
+            a: 'يتعرف التطبيق تلقائياً على الأعياد الوطنية والدينية المغربية، ويضاعف الأجر (×2) عند تسجيل الحضور في يوم عطلة رسمية.',
+          },
+          {
+            q: 'كيف يُحسب اقتطاع الضمان الاجتماعي والتأمين عن المرض؟',
+            a: 'يُقتطع 4.48% للصندوق الوطني للضمان الاجتماعي على الأجر الإجمالي بسقف أقصى قدره 6000 درهم، ويُقتطع 2.26% للتأمين الإجباري عن المرض على كامل الأجر الإجمالي.',
+          },
+          {
+            q: 'كيف يؤثر الغياب على الأجر الشهري؟',
+            a: 'يُخصم كل يوم غياب بقيمة الأجر اليومي الأساسي (8 ساعات)، ويمكنك في أي وقت إلغاء الغياب أو تحويله إلى حضور إذا سُجِّل عن طريق الخطأ.',
+          },
+        ],
+        // About Screen
+        aboutTitle: 'نبذة عن التطبيق',
+        aboutIntro:
+          'تطبيق CheckDay صُمّم خصيصاً للعمال والأجراء في المغرب لتتبع الحضور اليومي، وتنظيم المناوبات، وحساب الأجر الصافي والمنح والاقتطاعات بدقة وشفافية طيلة الدورة الشهرية من 18 إلى 17.',
+        aboutWhyTitle: 'لماذا بُني CheckDay؟',
+        aboutWhyBody:
+          'لتبسيط مراجعة ساعات العمل وتجنّب الأخطاء في حساب أيام الأحد والعطل الرسمية والساعات الإضافية والمنح، بواجهة عربية وفرنسية وإنجليزية واضحة وسريعة.',
+        aboutFeaturesTitle: 'أبرز المزايا',
+        aboutFeatures: [
+          'دورة أجر دقيقة من 18 إلى 17 مع قفل تلقائي للأيام المستقبلية لمنع أخطاء التسجيل.',
+          'تعرّف ذكي على العطل الرسمية المغربية (×2) وأيام الأحد ومناوبات 12 ساعة.',
+          'محفظة مفصلة بدون تكرار حساب، وحساب فوري لاقتطاعات الضمان الاجتماعي والتأمين عن المرض.',
+          'محاكي الأجر التفاعلي لتقدير الصافي قبل نهاية الشهر، مع تصدير مباشر لملف إكسل.',
+        ],
+        developerCredit: 'تم التطوير بواسطة محمد الوكيلي ومجموعة MRM19',
+        versionLabel: 'الإصدار',
+        // Status & Banners
+        suspendedTitle: 'الحساب موقوف مؤقتاً',
+        suspendedBody: 'يرجى التواصل مع الإدارة لتفعيل حسابك.',
+        maintenanceTitle: 'التطبيق في صيانة مؤقتة',
+        forceUpdateBanner: 'يتوفر إصدار جديد من التطبيق',
+        updateNow: 'تحديث الآن',
+        // Excel Export Headers
+        excelSheetName: 'سجل_الدورة',
+        excelHeaders: ['التاريخ', 'الحالة', 'النظام', 'وقت الدخول', 'وقت الخروج', 'الساعات', 'عطلة رسمية', 'الأحد', 'المبلغ الإجمالي', 'حالة الدفع'],
+        yes: 'نعم',
+        no: 'لا',
+        savedToast: 'تم الحفظ بنجاح',
+        deletedToast: 'تم الحذف بنجاح',
+        exportedToast: 'تم تصدير ملف إكسل بنجاح',
+      },
+
+      fr: {
+        dir: 'ltr',
+        fontClass: 'font-latin',
+        currency: 'DH',
+        appTagline: 'Suivi précis de présence et paie',
+        loading: 'Chargement...',
+        weekdaysShort: ['Di', 'Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa'],
+        welcomeTitle: 'Bienvenue sur CheckDay',
+        welcomeSub: 'Suivez vos présences, vos rotations et votre salaire net en toute clarté',
+        signInGoogle: 'Continuer avec Google',
+        signInPhone: 'Connexion par numéro de téléphone',
+        phonePlaceholder: '06XXXXXXXX',
+        sendOtp: 'Se connecter',
+        createPhoneAccount: 'Créer mon compte',
+        phoneLoginTab: 'Connexion',
+        phoneRegisterTab: 'Nouveau compte',
+        passwordLabel: 'Mot de passe (6 caractères min.)',
+        passwordPlaceholder: '••••••••',
+        authErrorGeneric: 'Vérifiez votre numéro et mot de passe puis réessayez',
+        backBtn: 'Retour',
+        pinUnlockTitle: 'Code PIN personnel',
+        pinUnlockSub: 'Déverrouillez votre application',
+        pinWrong: 'Code incorrect, veuillez réessayer',
+        pinClear: 'Effacer',
+        setupTitle: 'Profil du collaborateur',
+        setupSub: "La catégorie de shift est définie une seule fois à l'inscription",
+        fullName: 'Nom complet',
+        fullNamePh: 'Ex: Mohammed Loukili',
+        matricule: 'Matricule',
+        matriculePh: 'Ex: 10482',
+        contractType: 'Type de contrat',
+        contracts: {
+          ANAPEC: 'ANAPEC',
+          CDD: 'CDD',
+          CDI: 'CDI',
+          AUTRE: 'Autre',
+        },
+        dailyRate8h: 'Taux journalier (8h)',
+        hourlyRate: 'Taux horaire',
+        shiftCategory: 'Catégorie de shift',
+        shiftLockedNote: "Le shift est verrouillé à l'inscription et ne peut pas être modifié ensuite",
+        shifts: {
+          normal: 'Shift Normal',
+          A: 'Shift A',
+          B: 'Shift B',
+          C: 'Shift C',
+        },
+        completeSetup: 'Enregistrer et démarrer',
+        nav: {
+          record: 'Pointage',
+          history: 'Historique',
+          wallet: 'Portefeuille',
+          payroll: 'Paie',
+          bonuses: 'Primes',
+        },
+        cycleLabel: 'Cycle mensuel',
+        moroccoTime: 'Heure du Maroc',
+        dayEstimate: 'Estimation du jour',
+        selectedDate: 'Date sélectionnée',
+        todayBadge: "Aujourd'hui",
+        futureLockedToast: 'Les dates futures sont verrouillées jusqu’à leur jour exact',
+        holidayBanner: 'Jour férié marocain — rémunération doublée',
+        fridayFlexBanner: 'Vendredi — ajustez librement votre heure de sortie',
+        saturdayFlexBanner: 'Samedi — ajustez librement votre heure de sortie',
+        sundayBanner: 'Dimanche — majoration spéciale jour de repos',
+        shift12hBanner: 'Shift 12h — heures supplémentaires incluses',
+        chooseShift: 'Choisir le shift du jour',
+        shiftNormal8h: 'Journée normale (8h)',
+        shiftMorning: 'Matin (06:00 - 14:00)',
+        shiftAfternoon: 'Après-midi (14:00 - 22:00)',
+        shiftNight: 'Nuit (22:00 - 06:00)',
+        shift12h: 'Shift 12h',
+        shiftCustom: 'Heures personnalisées',
+        exitTimeLabel: 'Heure de sortie',
+        customHoursLabel: 'Heures travaillées',
+        markPresent: 'Enregistrer Présence',
+        markAbsent: 'Marquer Absent',
+        dayRecordedPresent: 'Journée enregistrée comme Présent',
+        dayRecordedAbsent: 'Journée enregistrée comme Absent',
+        undoAbsence: "Retirer l'absence",
+        switchToPresent: 'Passer en Présent',
+        updateRecord: 'Mettre à jour',
+        deleteRecord: 'Supprimer le jour',
+        cycleCalendarTitle: 'Calendrier du cycle (18 au 17)',
+        legendPresent: 'Présent',
+        legendAbsent: 'Absent',
+        legendHoliday: 'Jour férié',
+        legendLocked: 'Verrouillé',
+        historyTitle: 'Historique des pointages',
+        currentCycle: 'Cycle en cours',
+        allRecords: 'Tout afficher',
+        filters: {
+          all: 'Tout',
+          unpaid: 'Impayé',
+          paid: 'Payé',
+          sunday: 'Dimanche',
+          long: '12h / Perso',
+          h8: '8h',
+          holiday: 'Jours fériés',
+          absent: 'Absent',
+        },
+        paidStatus: 'Payé',
+        unpaidStatus: 'Impayé',
+        absentLabel: 'Absent',
+        hoursUnit: 'h',
+        noRecords: 'Aucun pointage trouvé pour ce filtre',
+        editDay: 'Modifier',
+        removeDay: 'Supprimer',
+        walletTitle: 'Portefeuille des gains',
+        grossTotal: 'Brut accumulé',
+        paidTotal: 'Déjà payé',
+        remainingTotal: 'Reste à percevoir',
+        categoryBreakdown: 'Répartition par catégorie',
+        catHoliday: 'Jours fériés (×2)',
+        catSunday: 'Dimanches travaillés',
+        catLong: 'Shifts 12h et personnalisés',
+        catNormal: 'Journées normales (8h)',
+        catBonuses: 'Primes',
+        daysUnit: 'j',
+        payrollTitle: 'Calcul de la paie',
+        openSimulator: 'Ouvrir le simulateur de salaire',
+        rateSettings: 'Paramètres de taux',
+        salaryAdvance: 'Avance sur salaire',
+        cnssLabel: 'CNSS (4.48% plafonné à 6000)',
+        amoLabel: 'AMO (2.26%)',
+        grossWork: 'Brut jours travaillés',
+        bonusesReceived: 'Primes reçues',
+        totalGross: 'Total Brut',
+        cnssDeduction: 'Cotisation CNSS',
+        amoDeduction: 'Cotisation AMO',
+        advanceDeduction: 'Avance déduite',
+        netToPay: 'Net à payer',
+        printPayslip: 'Imprimer la fiche de paie',
+        payslipTitle: 'Bulletin de paie estimatif',
+        closeBtn: 'Fermer',
+        printNow: 'Imprimer',
+        simTitle: 'Simulateur de salaire et retenues',
+        simSubtitle: 'Simulez l’impact des absences, avances et cotisations sur votre net',
+        simTargetGross: 'Salaire brut attendu',
+        simAbsenceDays: "Jours d'absence",
+        simAdvance: 'Avance sur salaire',
+        simCustomDed: 'Autres retenues',
+        simTotalDed: 'Total des retenues',
+        simNetRemaining: 'Salaire net restant',
+        simAbsenceCost: 'Retenue absences',
+        bonusesTitle: 'Gestion des primes',
+        expectedLabel: 'Attendu',
+        receivedLabel: 'Reçu',
+        missingLabel: 'Manquant',
+        addBonusTitle: 'Ajouter une prime',
+        bonusCategory: 'Catégorie de prime',
+        bonusCategories: {
+          attendance: 'Prime d’assiduité',
+          transport: 'Prime de transport',
+          meal: 'Prime de panier',
+          productivity: 'Prime de rendement',
+          seniority: 'Prime d’ancienneté',
+          custom: 'Prime personnalisée',
+        },
+        bonusNamePh: 'Nom de la prime personnalisée',
+        addBonusBtn: 'Ajouter la prime',
+        noBonuses: 'Aucune prime enregistrée pour ce cycle',
+        markReceived: 'Marquer reçue',
+        menuTitle: 'Menu principal',
+        menuSimulator: 'Simulateur de salaire',
+        menuFaq: 'Règles de travail & FAQ',
+        menuAbout: "À propos de l'application",
+        menuPinLock: 'Verrouillage PIN local',
+        pinEnabled: 'Activé',
+        pinDisabled: 'Désactivé',
+        menuExportExcel: 'Exporter le cycle en Excel',
+        menuSound: 'Effets sonores',
+        soundTester: 'Tester les sons',
+        soundBtns: {
+          tap: 'Touche',
+          success: 'Succès',
+          coin: 'Prime',
+          absent: 'Absence',
+        },
+        languageLabel: 'Langue',
+        logoutBtn: 'Déconnexion',
+        pinModalTitle: 'Configurer le code PIN',
+        pinEnter4: 'Saisissez un code à 4 chiffres',
+        pinSave: 'Activer le PIN',
+        pinRemove: 'Désactiver le PIN',
+        faqTitle: 'Règles de travail & FAQ',
+        faqs: [
+          {
+            q: 'Comment fonctionne le cycle de paie du 18 au 17 ?',
+            a: 'Chaque cycle débute le 18 du mois et se termine le 17 du mois suivant. Tous vos pointages, absences et primes de cette période sont consolidés automatiquement.',
+          },
+          {
+            q: 'Quelle est la différence entre un shift 8h et 12h ?',
+            a: 'Une journée standard couvre 8h au taux journalier de base. En shift 12h, les 4 heures additionnelles sont automatiquement ajoutées au gain de la journée.',
+          },
+          {
+            q: 'Comment est calculé le travail du dimanche ?',
+            a: 'Le dimanche bénéficie d’un coefficient de majoration dédié (×1.5 par défaut) et apparaît dans sa propre catégorie du portefeuille sans double comptage.',
+          },
+          {
+            q: 'Comment sont gérés les jours fériés marocains (×2) ?',
+            a: 'Les fêtes nationales et religieuses du Maroc sont détectées automatiquement et rémunérées au double taux (×2) lorsque vous pointez présent.',
+          },
+          {
+            q: 'Comment sont calculées la CNSS et l’AMO ?',
+            a: 'La CNSS représente 4.48% du salaire brut plafonné à 6000 DH, et l’AMO représente 2.26% calculés sur la totalité du salaire brut.',
+          },
+          {
+            q: 'Quel est l’impact d’une absence sur le salaire ?',
+            a: 'Chaque journée d’absence n’est pas rémunérée (déduite au taux journalier de base). Vous pouvez retirer ou corriger une absence à tout moment.',
+          },
+        ],
+        aboutTitle: "À propos de l'application",
+        aboutIntro:
+          'CheckDay est conçu pour les travailleurs au Maroc afin de suivre facilement les présences, les rotations de shifts, les primes et le salaire net sur le cycle du 18 au 17.',
+        aboutWhyTitle: 'Pourquoi CheckDay ?',
+        aboutWhyBody:
+          'Pour offrir une visibilité claire et fiable sur chaque journée travaillée, éviter les erreurs de calcul des dimanches, jours fériés et retenues sociales, dans une interface fluide en arabe, français et anglais.',
+        aboutFeaturesTitle: 'Points forts',
+        aboutFeatures: [
+          'Cycle du 18 au 17 avec verrouillage automatique des dates futures pour éviter toute erreur.',
+          'Détection automatique des jours fériés marocains (×2), dimanches et shifts 12h.',
+          'Portefeuille sans double comptage et calcul instantané CNSS (4.48%) & AMO (2.26%).',
+          'Simulateur de salaire interactif et exportation Excel en un clic.',
+        ],
+        developerCredit: 'Développé par Mohammed Loukili & Équipe MRM19',
+        versionLabel: 'Version',
+        suspendedTitle: 'Compte temporairement suspendu',
+        suspendedBody: 'Veuillez contacter votre administrateur pour réactiver votre accès.',
+        maintenanceTitle: 'Maintenance en cours',
+        forceUpdateBanner: 'Une nouvelle version est disponible',
+        updateNow: 'Mettre à jour',
+        excelSheetName: 'Cycle_CheckDay',
+        excelHeaders: ['Date', 'Statut', 'Shift', 'Entrée', 'Sortie', 'Heures', 'Jour férié', 'Dimanche', 'Montant Brut', 'Paiement'],
+        yes: 'Oui',
+        no: 'Non',
+        savedToast: 'Enregistré avec succès',
+        deletedToast: 'Supprimé avec succès',
+        exportedToast: 'Fichier Excel exporté avec succès',
+      },
+
+      en: {
+        dir: 'ltr',
+        fontClass: 'font-latin',
+        currency: 'MAD',
+        appTagline: 'Smart attendance, shift & payroll tracker',
+        loading: 'Loading...',
+        weekdaysShort: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
+        welcomeTitle: 'Welcome to CheckDay',
+        welcomeSub: 'Track daily attendance, shift rotations, bonuses, and net pay with clarity',
+        signInGoogle: 'Continue with Google',
+        signInPhone: 'Sign in with Phone Number',
+        phonePlaceholder: '06XXXXXXXX',
+        sendOtp: 'Sign In',
+        createPhoneAccount: 'Create Account',
+        phoneLoginTab: 'Sign In',
+        phoneRegisterTab: 'New Account',
+        passwordLabel: 'Password (min. 6 characters)',
+        passwordPlaceholder: '••••••••',
+        authErrorGeneric: 'Please check your phone number and password and try again',
+        backBtn: 'Back',
+        pinUnlockTitle: 'Enter Personal PIN',
+        pinUnlockSub: 'Unlock your CheckDay workspace',
+        pinWrong: 'Incorrect PIN, please try again',
+        pinClear: 'Clear',
+        setupTitle: 'Worker Profile Setup',
+        setupSub: 'Your shift category is locked at registration',
+        fullName: 'Full Name',
+        fullNamePh: 'e.g. Mohammed Loukili',
+        matricule: 'Employee ID',
+        matriculePh: 'e.g. 10482',
+        contractType: 'Contract Type',
+        contracts: {
+          ANAPEC: 'ANAPEC',
+          CDD: 'Fixed-Term (CDD)',
+          CDI: 'Permanent (CDI)',
+          AUTRE: 'Other',
+        },
+        dailyRate8h: 'Daily Rate (8h)',
+        hourlyRate: 'Hourly Rate',
+        shiftCategory: 'Shift Category',
+        shiftLockedNote: 'Shift category is locked after registration and cannot be switched later',
+        shifts: {
+          normal: 'Shift Normal',
+          A: 'Shift A',
+          B: 'Shift B',
+          C: 'Shift C',
+        },
+        completeSetup: 'Save & Continue',
+        nav: {
+          record: 'Record',
+          history: 'History',
+          wallet: 'Wallet',
+          payroll: 'Payroll',
+          bonuses: 'Bonuses',
+        },
+        cycleLabel: 'Payroll Cycle',
+        moroccoTime: 'Morocco Time',
+        dayEstimate: 'Day Estimate',
+        selectedDate: 'Selected Date',
+        todayBadge: 'Today',
+        futureLockedToast: 'Future dates remain locked until that calendar day arrives',
+        holidayBanner: 'Moroccan Public Holiday — double rate applied',
+        fridayFlexBanner: 'Friday — adjust your exit time freely',
+        saturdayFlexBanner: 'Saturday — adjust your exit time freely',
+        sundayBanner: 'Sunday — special rest-day rate applied',
+        shift12hBanner: '12h Shift — overtime hours included',
+        chooseShift: 'Choose Day Shift',
+        shiftNormal8h: 'Standard Day (8h)',
+        shiftMorning: 'Morning (06:00 - 14:00)',
+        shiftAfternoon: 'Afternoon (14:00 - 22:00)',
+        shiftNight: 'Night (22:00 - 06:00)',
+        shift12h: '12h Shift',
+        shiftCustom: 'Custom Hours',
+        exitTimeLabel: 'Exit Time',
+        customHoursLabel: 'Hours Worked',
+        markPresent: 'Save Present',
+        markAbsent: 'Mark Absent',
+        dayRecordedPresent: 'Recorded as Present',
+        dayRecordedAbsent: 'Recorded as Absent',
+        undoAbsence: 'Remove Absence',
+        switchToPresent: 'Switch to Present',
+        updateRecord: 'Update Entry',
+        deleteRecord: 'Delete Day',
+        cycleCalendarTitle: 'Cycle Calendar (18th to 17th)',
+        legendPresent: 'Present',
+        legendAbsent: 'Absent',
+        legendHoliday: 'Holiday',
+        legendLocked: 'Locked',
+        historyTitle: 'Attendance History',
+        currentCycle: 'Current Cycle',
+        allRecords: 'All Records',
+        filters: {
+          all: 'All',
+          unpaid: 'Unpaid',
+          paid: 'Paid',
+          sunday: 'Sunday',
+          long: '12h / Custom',
+          h8: '8h',
+          holiday: 'Holidays',
+          absent: 'Absent',
+        },
+        paidStatus: 'Paid',
+        unpaidStatus: 'Unpaid',
+        absentLabel: 'Absent',
+        hoursUnit: 'h',
+        noRecords: 'No records match this filter',
+        editDay: 'Edit',
+        removeDay: 'Remove',
+        walletTitle: 'Earnings Wallet',
+        grossTotal: 'Gross Earnings',
+        paidTotal: 'Paid',
+        remainingTotal: 'Remaining',
+        categoryBreakdown: 'Category Breakdown',
+        catHoliday: 'Public Holidays (×2)',
+        catSunday: 'Sundays',
+        catLong: '12h & Custom Shifts',
+        catNormal: 'Standard 8h Days',
+        catBonuses: 'Bonuses',
+        daysUnit: 'd',
+        payrollTitle: 'Net Payroll',
+        openSimulator: 'Open Salary Simulator',
+        rateSettings: 'Rate Settings',
+        salaryAdvance: 'Salary Advance',
+        cnssLabel: 'CNSS (4.48% capped at 6000)',
+        amoLabel: 'AMO (2.26%)',
+        grossWork: 'Worked Days Gross',
+        bonusesReceived: 'Bonuses Received',
+        totalGross: 'Total Gross',
+        cnssDeduction: 'CNSS Deduction',
+        amoDeduction: 'AMO Deduction',
+        advanceDeduction: 'Salary Advance',
+        netToPay: 'Net to Pay',
+        printPayslip: 'Print Payslip',
+        payslipTitle: 'Estimated Payslip',
+        closeBtn: 'Close',
+        printNow: 'Print Now',
+        simTitle: 'Salary & Deductions Simulator',
+        simSubtitle: 'Simulate absences, advances, and social deductions on any target gross salary',
+        simTargetGross: 'Expected Gross Salary',
+        simAbsenceDays: 'Absence Days',
+        simAdvance: 'Salary Advances',
+        simCustomDed: 'Custom Deductions',
+        simTotalDed: 'Total Deductions',
+        simNetRemaining: 'Remaining Net Salary',
+        simAbsenceCost: 'Absence Deduction',
+        bonusesTitle: 'Bonuses Tracker',
+        expectedLabel: 'Expected',
+        receivedLabel: 'Received',
+        missingLabel: 'Missing',
+        addBonusTitle: 'Add Bonus',
+        bonusCategory: 'Bonus Category',
+        bonusCategories: {
+          attendance: 'Attendance Bonus',
+          transport: 'Transport Allowance',
+          meal: 'Meal Allowance',
+          productivity: 'Productivity Bonus',
+          seniority: 'Seniority Bonus',
+          custom: 'Custom Bonus',
+        },
+        bonusNamePh: 'Custom bonus name',
+        addBonusBtn: 'Add Bonus',
+        noBonuses: 'No bonuses added for this cycle yet',
+        markReceived: 'Mark Received',
+        menuTitle: 'Menu',
+        menuSimulator: 'Salary Simulator',
+        menuFaq: 'Work Rules & FAQ',
+        menuAbout: 'About CheckDay',
+        menuPinLock: 'Local App PIN Lock',
+        pinEnabled: 'Enabled',
+        pinDisabled: 'Off',
+        menuExportExcel: 'Export Cycle to Excel',
+        menuSound: 'Sound Effects',
+        soundTester: 'Sound Tester',
+        soundBtns: {
+          tap: 'Tap',
+          success: 'Success',
+          coin: 'Chime',
+          absent: 'Absent',
+        },
+        languageLabel: 'Language',
+        logoutBtn: 'Sign Out',
+        pinModalTitle: 'Set Local App PIN',
+        pinEnter4: 'Enter a 4-digit PIN code',
+        pinSave: 'Enable PIN',
+        pinRemove: 'Disable PIN',
+        faqTitle: 'Work Rules & General FAQ',
+        faqs: [
+          {
+            q: 'How does the 18th-to-17th payroll cycle work?',
+            a: 'Each monthly payroll cycle runs from the 18th of the current month through the 17th of the following month. All attendance, absences, and bonuses inside that window are grouped together automatically.',
+          },
+          {
+            q: 'How do 8h and 12h shifts differ in pay?',
+            a: 'A standard workday pays your 8-hour base daily rate. Working a 12-hour shift adds the extra hours automatically using your hourly rate.',
+          },
+          {
+            q: 'How is Sunday work calculated?',
+            a: 'Sundays carry a dedicated rest-day multiplier (default ×1.5) and appear in their own Wallet category with zero double-counting.',
+          },
+          {
+            q: 'How do Moroccan public holidays (×2) work?',
+            a: 'Official national and religious Moroccan holidays are auto-detected and automatically apply a double rate (×2) when you log attendance.',
+          },
+          {
+            q: 'How are CNSS and AMO calculated?',
+            a: 'CNSS is 4.48% of gross pay capped at 6,000 MAD, while AMO is 2.26% applied to total gross earnings.',
+          },
+          {
+            q: 'How do absences affect monthly pay?',
+            a: 'Each absence reduces pay by one base 8h daily rate. If marked by mistake, you can immediately remove the absence or switch the day back to Present.',
+          },
+        ],
+        aboutTitle: 'About CheckDay',
+        aboutIntro:
+          'CheckDay is built for Moroccan workers to track daily attendance, shift rotations, bonuses, and net payroll accurately across the 18th-to-17th cycle.',
+        aboutWhyTitle: 'Why CheckDay was built',
+        aboutWhyBody:
+          'To give every worker complete clarity over hours worked, Sundays, public holidays, and social deductions in a clean, distraction-free interface across Arabic, French, and English.',
+        aboutFeaturesTitle: 'Key Highlights',
+        aboutFeatures: [
+          '18th-to-17th cycle calendar with automatic future-date locking to prevent mistakes.',
+          'Smart auto-detection for Moroccan public holidays (×2), Sundays, and 12h shifts.',
+          'Zero double-counting Wallet breakdown plus live CNSS (4.48%) & AMO (2.26%) payroll math.',
+          'Interactive Salary & Deductions Simulator and 1-click Excel export.',
+        ],
+        developerCredit: 'Developed by Mohammed Loukili & MRM19 Team',
+        versionLabel: 'Version',
+        suspendedTitle: 'Account Temporarily Suspended',
+        suspendedBody: 'Please contact administration to reactivate your account.',
+        maintenanceTitle: 'Temporary Maintenance',
+        forceUpdateBanner: 'A new version of CheckDay is available',
+        updateNow: 'Update Now',
+        excelSheetName: 'CheckDay_Cycle',
+        excelHeaders: ['Date', 'Status', 'Shift', 'Start', 'End', 'Hours', 'Public Holiday', 'Sunday', 'Gross Amount', 'Payment'],
+        yes: 'Yes',
+        no: 'No',
+        savedToast: 'Saved successfully',
+        deletedToast: 'Removed successfully',
+        exportedToast: 'Excel file exported',
+      },
+    };
+
+    /* =========================================================================
+       6. BRAND-NEW CUSTOM SVG LOGO & HELPER COMPONENTS
+       ========================================================================= */
+    function CheckDayLogo({ size = 38, showWordmark = true, light = false }) {
+      return (
+        <div className="inline-flex items-center gap-2.5 select-none" dir="ltr">
+          <svg
+            width={size}
+            height={size}
+            viewBox="0 0 64 64"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-label="CheckDay Logo"
+          >
+            <defs>
+              <linearGradient id="cdSquircle" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#0B1D3A" />
+                <stop offset="65%" stopColor="#163466" />
+                <stop offset="100%" stopColor="#0D525E" />
+              </linearGradient>
+              <linearGradient id="cdEmerald" x1="14" y1="46" x2="52" y2="16" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#00A884" />
+                <stop offset="60%" stopColor="#00C29A" />
+                <stop offset="100%" stopColor="#6EE7D2" />
+              </linearGradient>
+            </defs>
+            {/* Soft Squircle Base */}
+            <rect x="2" y="2" width="60" height="60" rx="18" fill="url(#cdSquircle)" />
+            <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="17.25" stroke="rgba(110,231,210,0.28)" strokeWidth="1.5" />
+            {/* Subtle Ambient Pulse Arc */}
+            <path
+              d="M14 42C19 42 21 35 25 35C29 35 30 43 35 43C40 43 44 26 51 20"
+              stroke="rgba(110,231,210,0.22)"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+            {/* Geometric Rising Checkmark Badge */}
+            <path
+              d="M17.5 33.5L27 43L47.5 21.5"
+              stroke="url(#cdEmerald)"
+              strokeWidth="6.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {/* Mint Highlight Spark */}
+            <circle cx="48.5" cy="20.5" r="3.2" fill="#6EE7D2" />
+          </svg>
+          {showWordmark && (
+            <span
+              className={`font-latin font-extrabold tracking-tight text-[19px] leading-none ${
+                light ? 'text-white' : 'text-[#0B1D3A]'
+              }`}
+            >
+              Check<span className="text-[#00C29A]">Day</span>
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    function LtrNum({ children, className = '' }) {
+      return <span className={`font-mono-num ${className}`}>{children}</span>;
+    }
+
+    function fmtMoney(val, currency) {
+      const n = Number(val || 0);
+      return `${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+    }
+
+    /* =========================================================================
+       7. MAIN APPLICATION
+       ========================================================================= */
+    function App() {
+      const [lang, setLang] = useState(() => Storage.get(KEYS.LANG, 'ar'));
+      const t = I18N[lang] || I18N.ar;
+
+      // Auth & Profile State
+      const [profile, setProfile] = useState(() => Storage.get(KEYS.PROFILE, null));
+      const [authStage, setAuthStage] = useState('welcome'); // welcome | phone | otp | setup
+      const [authIdentity, setAuthIdentity] = useState({ id: '', email: '', phone: '' });
+      const [phoneInput, setPhoneInput] = useState('');
+      const [phonePassword, setPhonePassword] = useState('');
+      const [phoneMode, setPhoneMode] = useState('login'); // login | register
+      const [phoneAuthError, setPhoneAuthError] = useState('');
+
+      // Local PIN Lock State
+      const [pinHash, setPinHash] = useState(() => Storage.get(KEYS.PIN_HASH, null));
+      const [isPinUnlocked, setIsPinUnlocked] = useState(() => !Storage.get(KEYS.PIN_HASH, null));
+      const [pinEntry, setPinEntry] = useState('');
+      const [pinError, setPinError] = useState(false);
+      const [showPinModal, setShowPinModal] = useState(false);
+      const [newPinInput, setNewPinInput] = useState('');
+
+      // Registration Form State
+      const [regName, setRegName] = useState('');
+      const [regMatricule, setRegMatricule] = useState('');
+      const [regContract, setRegContract] = useState('CDD');
+      const [regDailyRate, setRegDailyRate] = useState('143.36');
+      const [regShift, setRegShift] = useState('normal');
+
+      // Core Domain Data
+      const [records, setRecords] = useState(() => Storage.get(KEYS.RECORDS, {}));
+      const [bonuses, setBonuses] = useState(() => Storage.get(KEYS.BONUSES, []));
+      const [payroll, setPayroll] = useState(() =>
+        Storage.get(KEYS.PAYROLL, {
+          daily_rate: 143.36,
+          hourly_rate: 17.92,
+          salary_advance: 0,
+          cnss_enabled: true,
+          amo_enabled: true,
+        })
+      );
+      const [holidays, setHolidays] = useState(() => Storage.get(KEYS.HOLIDAYS, DEFAULT_HOLIDAYS));
+      const [announcements, setAnnouncements] = useState(() => Storage.get(KEYS.ANNOUNCEMENTS, []));
+      const [appConfig, setAppConfig] = useState(() => Storage.get(KEYS.CONFIG, DEFAULT_CONFIG));
+
+      // Navigation & UI State
+      const [activeTab, setActiveTab] = useState('record'); // record | history | wallet | payroll | bonuses
+      const [activeOverlayScreen, setActiveOverlayScreen] = useState(null); // simulator | faq | about | null
+      const [drawerOpen, setDrawerOpen] = useState(false);
+      const [showPayslip, setShowPayslip] = useState(false);
+      const [loadingOverlay, setLoadingOverlay] = useState(false);
+      const [toast, setToast] = useState(null);
+      const [soundMuted, setSoundMuted] = useState(() => Storage.get(KEYS.SOUND_MUTED, false));
+
+      // Live Morocco Time
+      const [nowMa, setNowMa] = useState(() => getMoroccoDateParts());
+      const todayIso = nowMa.iso;
+      const cycle = useMemo(() => getCycleRange(todayIso), [todayIso]);
+
+      // Record Screen Controls
+      const [selectedDate, setSelectedDate] = useState(() => getMoroccoDateParts().iso);
+      const [selectedShiftType, setSelectedShiftType] = useState('normal'); // normal | morning | afternoon | night | 12h | custom
+      const [normalExitTime, setNormalExitTime] = useState('17:30');
+      const [customHours, setCustomHours] = useState('10');
+
+      // History Filters
+      const [historyScope, setHistoryScope] = useState('cycle'); // cycle | all
+      const [historyFilter, setHistoryFilter] = useState('all');
+
+      // Bonuses Form
+      const [bonusCat, setBonusCat] = useState('attendance');
+      const [bonusCustomName, setBonusCustomName] = useState('');
+      const [bonusExpected, setBonusExpected] = useState('');
+      const [bonusReceived, setBonusReceived] = useState('');
+
+      // Salary Simulator State
+      const [simGross, setSimGross] = useState('3500');
+      const [simAbsences, setSimAbsences] = useState('0');
+      const [simAdvance, setSimAdvance] = useState('0');
+      const [simCustomDed, setSimCustomDed] = useState('0');
+      const [simCnss, setSimCnss] = useState(true);
+      const [simAmo, setSimAmo] = useState(true);
+
+      // Update document dir & lang
+      useEffect(() => {
+        document.documentElement.lang = lang;
+        document.documentElement.dir = t.dir;
+        Storage.set(KEYS.LANG, lang);
+      }, [lang, t.dir]);
+
+      // Live Morocco clock every second
+      useEffect(() => {
+        const timer = setInterval(() => setNowMa(getMoroccoDateParts()), 1000);
+        return () => clearInterval(timer);
+      }, []);
+
+      // Persist local state
+      useEffect(() => { Storage.set(KEYS.RECORDS, records); }, [records]);
+      useEffect(() => { Storage.set(KEYS.BONUSES, bonuses); }, [bonuses]);
+      useEffect(() => { Storage.set(KEYS.PAYROLL, payroll); }, [payroll]);
+
+      // Silent Cloud Bootstrap & Realtime Listeners
+      useEffect(() => {
+        if (!supabaseClient) return;
+        let channels = [];
+        (async () => {
+          try {
+            const { data: cfg } = await supabaseClient.from('app_config').select('*').eq('id', 1).single();
+            if (cfg) {
+              setAppConfig(cfg);
+              Storage.set(KEYS.CONFIG, cfg);
+            }
+            const { data: hols } = await supabaseClient
+              .from('public_holidays')
+              .select('*')
+              .eq('is_active', true);
+            if (hols && hols.length) {
+              setHolidays(hols);
+              Storage.set(KEYS.HOLIDAYS, hols);
+            }
+            const { data: anns } = await supabaseClient
+              .from('announcements')
+              .select('*')
+              .eq('is_active', true)
+              .order('created_at', { ascending: false });
+            if (anns) {
+              setAnnouncements(anns);
+              Storage.set(KEYS.ANNOUNCEMENTS, anns);
+            }
+
+            const { data: sess } = await supabaseClient.auth.getSession();
+            if (sess?.session?.user) {
+              const uid = sess.session.user.id;
+              const { data: prof } = await supabaseClient
+                .from('profiles')
+                .select('*')
+                .eq('id', uid)
+                .single();
+              if (prof) {
+                setProfile(prof);
+                Storage.set(KEYS.PROFILE, prof);
+                supabaseClient.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('id', uid);
+              } else {
+                setAuthIdentity({
+                  id: uid,
+                  email: sess.session.user.email || '',
+                  phone: sess.session.user.phone || '',
+                });
+                setAuthStage('setup');
+              }
+            }
+
+            const annSub = supabaseClient
+              .channel('cd-announcements')
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, async () => {
+                const { data } = await supabaseClient
+                  .from('announcements')
+                  .select('*')
+                  .eq('is_active', true)
+                  .order('created_at', { ascending: false });
+                if (data) {
+                  setAnnouncements(data);
+                  Storage.set(KEYS.ANNOUNCEMENTS, data);
+                }
+              })
+              .subscribe();
+
+            const cfgSub = supabaseClient
+              .channel('cd-config')
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, async () => {
+                const { data } = await supabaseClient.from('app_config').select('*').eq('id', 1).single();
+                if (data) {
+                  setAppConfig(data);
+                  Storage.set(KEYS.CONFIG, data);
+                }
+              })
+              .subscribe();
+
+            channels = [annSub, cfgSub];
+            SilentSync.flush();
+          } catch {}
+        })();
+
+        return () => {
+          channels.forEach((c) => {
+            try { supabaseClient.removeChannel(c); } catch {}
+          });
+        };
+      }, []);
+
+      // Keep shift selection synced when selectedDate or profile changes
+      useEffect(() => {
+        const existing = records[selectedDate];
+        if (existing) {
+          setSelectedShiftType(existing.shift_type || (profile?.shift_category === 'normal' ? 'normal' : 'morning'));
+          if (existing.end_time) setNormalExitTime(existing.end_time);
+          if (existing.shift_type === 'custom') setCustomHours(String(existing.hours_worked || 10));
+        } else {
+          if (profile?.shift_category === 'normal') {
+            setSelectedShiftType('normal');
+            setNormalExitTime('17:30');
+          } else {
+            setSelectedShiftType('morning');
+          }
+        }
+      }, [selectedDate, records, profile]);
+
+      const showToast = useCallback((msg, tone = 'emerald') => {
+        setToast({ msg, tone });
+        setTimeout(() => setToast(null), 2600);
+      }, []);
+
+      // Exact 1000ms UX Loader
+      const runWithLoader = useCallback((fn, sound = 'tap') => {
+        soundEngine.play(sound);
+        setLoadingOverlay(true);
+        setTimeout(() => {
+          try {
+            fn();
+          } finally {
+            setLoadingOverlay(false);
+          }
+        }, 1000);
+      }, []);
+
+      // Holiday lookup map
+      const holidayMap = useMemo(() => {
+        const map = {};
+        for (const h of holidays) {
+          map[h.holiday_date] = h;
+        }
+        return map;
+      }, [holidays]);
+
+      const getHolidayName = useCallback(
+        (h) => {
+          if (!h) return '';
+          if (lang === 'ar') return h.name_ar || h.name_fr || h.name_en;
+          if (lang === 'fr') return h.name_fr || h.name_en || h.name_ar;
+          return h.name_en || h.name_fr || h.name_ar;
+        },
+        [lang]
+      );
+
+      // Compute pay for a given day & shift configuration
+      const computeDayPay = useCallback(
+        (dateIso, shiftType, exitTimeVal, customHrsVal) => {
+          const dailyRate = Number(payroll.daily_rate || profile?.daily_rate || 143.36);
+          const hourlyRate = Number(payroll.hourly_rate || dailyRate / 8);
+          const holidayObj = holidayMap[dateIso] || null;
+          const isHoliday = Boolean(holidayObj);
+          const isSunday = getDayOfWeek(dateIso) === 0;
+
+          let hours = 8;
+          let startTime = '08:30';
+          let endTime = '17:30';
+
+          if (shiftType === 'normal') {
+            startTime = '08:30';
+            endTime = exitTimeVal || '17:30';
+            hours = calcTimeDurationHours(startTime, endTime);
+          } else if (shiftType === 'morning') {
+            startTime = '06:00';
+            endTime = '14:00';
+            hours = 8;
+          } else if (shiftType === 'afternoon') {
+            startTime = '14:00';
+            endTime = '22:00';
+            hours = 8;
+          } else if (shiftType === 'night') {
+            startTime = '22:00';
+            endTime = '06:00';
+            hours = 8;
+          } else if (shiftType === '12h') {
+            startTime = '06:00';
+            endTime = '18:00';
+            hours = 12;
+          } else if (shiftType === 'custom') {
+            startTime = '08:00';
+            hours = Math.max(0.5, Number(customHrsVal || 8));
+            const endH = (8 + Math.floor(hours)) % 24;
+            const endM = Math.round((hours % 1) * 60);
+            endTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+          }
+
+          let multiplier = 1;
+          if (isHoliday) {
+            multiplier = Number(holidayObj.multiplier || appConfig.holiday_multiplier || 2);
+          } else if (isSunday) {
+            multiplier = Number(appConfig.sunday_multiplier || 1.5);
+          }
+
+          const baseAmount = hours === 8 ? dailyRate : hours * hourlyRate;
+          const gross = Number((baseAmount * multiplier).toFixed(2));
+
+          return {
+            hours,
+            startTime,
+            endTime,
+            isHoliday,
+            holidayName: isHoliday ? getHolidayName(holidayObj) : '',
+            isSunday,
+            multiplier,
+            gross,
+          };
+        },
+        [payroll, profile, holidayMap, appConfig, getHolidayName]
+      );
+
+      // Selected date estimate
+      const dayPreview = useMemo(
+        () => computeDayPay(selectedDate, selectedShiftType, normalExitTime, customHours),
+        [computeDayPay, selectedDate, selectedShiftType, normalExitTime, customHours]
+      );
+
+      /* =======================================================================
+         ACTIONS: AUTH, REGISTRATION, PIN
+         ======================================================================= */
+      const handleGoogleSignIn = () => {
+        runWithLoader(async () => {
+          if (supabaseClient) {
+            try {
+              await supabaseClient.auth.signInWithOAuth({
+                provider: 'google',
+                options: { redirectTo: window.location.href },
+              });
+              return;
+            } catch {}
+          }
+          setAuthIdentity({
+            id: 'local-' + Date.now(),
+            email: 'worker@checkday.ma',
+            phone: '',
+          });
+          setAuthStage('setup');
+        }, 'tap');
+      };
+
+      const handlePhonePasswordAuth = (e) => {
+        e.preventDefault();
+        const digits = phoneInput.replace(/\D/g, '');
+        if (digits.length < 9 || phonePassword.length < 6) {
+          setPhoneAuthError(t.authErrorGeneric);
+          return;
+        }
+        setPhoneAuthError('');
+        const normalized = digits.startsWith('212') ? digits : '212' + digits.replace(/^0/, '');
+        const internalEmail = `${normalized}@phone.checkday.app`;
+        const displayPhone = `+${normalized}`;
+
+        runWithLoader(async () => {
+          let uid = 'local-' + normalized;
+          if (supabaseClient) {
+            try {
+              let res;
+              if (phoneMode === 'register') {
+                res = await supabaseClient.auth.signUp({
+                  email: internalEmail,
+                  password: phonePassword,
+                  options: { data: { phone: displayPhone } },
+                });
+              } else {
+                res = await supabaseClient.auth.signInWithPassword({
+                  email: internalEmail,
+                  password: phonePassword,
+                });
+              }
+              if (res.error) {
+                setPhoneAuthError(t.authErrorGeneric);
+                return;
+              }
+              if (res.data?.user?.id) {
+                uid = res.data.user.id;
+                const { data: existingProf } = await supabaseClient
+                  .from('profiles')
+                  .select('*')
+                  .eq('id', uid)
+                  .single();
+                if (existingProf) {
+                  setProfile(existingProf);
+                  Storage.set(KEYS.PROFILE, existingProf);
+                  return;
+                }
+              }
+            } catch {
+              setPhoneAuthError(t.authErrorGeneric);
+              return;
+            }
+          }
+          setAuthIdentity({ id: uid, email: '', phone: displayPhone });
+          setAuthStage('setup');
+        }, 'success');
+      };
+
+      const handleContractChange = (val) => {
+        soundEngine.play('tap');
+        setRegContract(val);
+        if (val === 'ANAPEC') {
+          setRegDailyRate(String(appConfig.default_anapec_rate || 131.64));
+        } else if (val === 'CDD' || val === 'CDI') {
+          setRegDailyRate(String(appConfig.default_cdd_cdi_rate || 143.36));
+        }
+      };
+
+      const handleCompleteSetup = (e) => {
+        e.preventDefault();
+        if (!regName.trim() || !regMatricule.trim()) return;
+        const rate = Math.max(1, Number(regDailyRate || 143.36));
+        const hourly = Number((rate / 8).toFixed(4));
+        const newProfile = {
+          id: authIdentity.id || 'local-' + Date.now(),
+          full_name: regName.trim(),
+          email: authIdentity.email || '',
+          phone: authIdentity.phone || '',
+          matricule: regMatricule.trim(),
+          contract_type: regContract,
+          daily_rate: rate,
+          hourly_rate: hourly,
+          shift_category: regShift,
+          account_status: 'approved',
+          role: 'operator',
+          language: lang,
+          created_at: new Date().toISOString(),
+          last_active_at: new Date().toISOString(),
+        };
+        const newPayroll = {
+          daily_rate: rate,
+          hourly_rate: hourly,
+          salary_advance: 0,
+          cnss_enabled: true,
+          amo_enabled: true,
+        };
+        runWithLoader(() => {
+          setProfile(newProfile);
+          setPayroll(newPayroll);
+          Storage.set(KEYS.PROFILE, newProfile);
+          Storage.set(KEYS.PAYROLL, newPayroll);
+          SilentSync.enqueue({ type: 'upsert_profile', payload: newProfile });
+          SilentSync.enqueue({
+            type: 'upsert_payroll',
+            payload: { user_id: newProfile.id, ...newPayroll },
+          });
+          showToast(t.savedToast);
+        }, 'success');
+      };
+
+      const handlePinDigit = async (digit) => {
+        soundEngine.play('tap');
+        setPinError(false);
+        const next = (pinEntry + digit).slice(0, 4);
+        setPinEntry(next);
+        if (next.length === 4) {
+          const h = await hashPin(next);
+          if (h === pinHash) {
+            soundEngine.play('success');
+            setIsPinUnlocked(true);
+            setPinEntry('');
+          } else {
+            soundEngine.play('absent');
+            setPinError(true);
+            setTimeout(() => setPinEntry(''), 420);
+          }
+        }
+      };
+
+      const handleSaveNewPin = async () => {
+        if (newPinInput.length !== 4) return;
+        const h = await hashPin(newPinInput);
+        setPinHash(h);
+        Storage.set(KEYS.PIN_HASH, h);
+        setNewPinInput('');
+        setShowPinModal(false);
+        soundEngine.play('success');
+        showToast(t.savedToast);
+      };
+
+      const handleDisablePin = () => {
+        setPinHash(null);
+        Storage.remove(KEYS.PIN_HASH);
+        setNewPinInput('');
+        setShowPinModal(false);
+        soundEngine.play('tap');
+        showToast(t.deletedToast);
+      };
+
+      const handleLogout = () => {
+        setDrawerOpen(false);
+        runWithLoader(async () => {
+          if (supabaseClient) {
+            try { await supabaseClient.auth.signOut(); } catch {}
+          }
+          setProfile(null);
+          Storage.remove(KEYS.PROFILE);
+          setAuthStage('welcome');
+          setActiveOverlayScreen(null);
+        }, 'nav');
+      };
+
+      /* =======================================================================
+         ACTIONS: ATTENDANCE RECORDING, REVERSIBLE ABSENCE & PAID TOGGLE
+         ======================================================================= */
+      const handleSelectDate = (dateIso) => {
+        if (dateIso > todayIso) {
+          soundEngine.play('absent');
+          showToast(t.futureLockedToast, 'amber');
+          return;
+        }
+        soundEngine.play('tap');
+        setSelectedDate(dateIso);
+      };
+
+      const handleSaveAttendance = (status) => {
+        if (selectedDate > todayIso) {
+          soundEngine.play('absent');
+          showToast(t.futureLockedToast, 'amber');
+          return;
+        }
+        const existing = records[selectedDate];
+        const calc = computeDayPay(selectedDate, selectedShiftType, normalExitTime, customHours);
+        const entry = {
+          user_id: profile.id,
+          work_date: selectedDate,
+          status,
+          shift_type: selectedShiftType,
+          start_time: status === 'present' ? calc.startTime : '00:00',
+          end_time: status === 'present' ? calc.endTime : '00:00',
+          hours_worked: status === 'present' ? calc.hours : 0,
+          is_sunday: calc.isSunday,
+          is_holiday: calc.isHoliday,
+          holiday_name: calc.holidayName,
+          rate_multiplier: status === 'present' ? calc.multiplier : 0,
+          gross_amount: status === 'present' ? calc.gross : 0,
+          is_paid: existing?.is_paid || false,
+        };
+        runWithLoader(() => {
+          setRecords((prev) => ({ ...prev, [selectedDate]: entry }));
+          SilentSync.enqueue({ type: 'upsert_attendance', payload: entry });
+          showToast(t.savedToast);
+        }, status === 'present' ? 'success' : 'absent');
+      };
+
+      const handleRemoveRecord = (dateIso) => {
+        runWithLoader(() => {
+          setRecords((prev) => {
+            const copy = { ...prev };
+            delete copy[dateIso];
+            return copy;
+          });
+          if (profile?.id) {
+            SilentSync.enqueue({
+              type: 'delete_attendance',
+              payload: { user_id: profile.id, work_date: dateIso },
+            });
+          }
+          showToast(t.deletedToast);
+        }, 'tap');
+      };
+
+      const handleSwitchAbsentToPresent = (dateIso) => {
+        const defaultShift = profile?.shift_category === 'normal' ? 'normal' : 'morning';
+        const calc = computeDayPay(dateIso, defaultShift, '17:30', '8');
+        const entry = {
+          user_id: profile.id,
+          work_date: dateIso,
+          status: 'present',
+          shift_type: defaultShift,
+          start_time: calc.startTime,
+          end_time: calc.endTime,
+          hours_worked: calc.hours,
+          is_sunday: calc.isSunday,
+          is_holiday: calc.isHoliday,
+          holiday_name: calc.holidayName,
+          rate_multiplier: calc.multiplier,
+          gross_amount: calc.gross,
+          is_paid: false,
+        };
+        runWithLoader(() => {
+          setRecords((prev) => ({ ...prev, [dateIso]: entry }));
+          SilentSync.enqueue({ type: 'upsert_attendance', payload: entry });
+          showToast(t.savedToast);
+        }, 'success');
+      };
+
+      const handleTogglePaid = (dateIso) => {
+        const rec = records[dateIso];
+        if (!rec || rec.status === 'absent') return;
+        const updated = { ...rec, is_paid: !rec.is_paid };
+        soundEngine.play(updated.is_paid ? 'coin' : 'tap');
+        setRecords((prev) => ({ ...prev, [dateIso]: updated }));
+        SilentSync.enqueue({ type: 'upsert_attendance', payload: updated });
+      };
+
+      /* =======================================================================
+         ACTIONS: BONUSES & PAYROLL SETTINGS
+         ======================================================================= */
+      const handleAddBonus = (e) => {
+        e.preventDefault();
+        const exp = Number(bonusExpected || 0);
+        const rec = Number(bonusReceived || 0);
+        if (exp <= 0 && rec <= 0) return;
+        const label =
+          bonusCat === 'custom'
+            ? bonusCustomName.trim() || t.bonusCategories.custom
+            : t.bonusCategories[bonusCat];
+        const newItem = {
+          id: 'b-' + Date.now(),
+          user_id: profile.id,
+          cycle_key: cycle.cycleKey,
+          category: bonusCat,
+          label,
+          expected_amount: exp,
+          received_amount: rec,
+        };
+        runWithLoader(() => {
+          setBonuses((prev) => [newItem, ...prev]);
+          setBonusCustomName('');
+          setBonusExpected('');
+          setBonusReceived('');
+          SilentSync.enqueue({ type: 'upsert_bonus', payload: newItem });
+          showToast(t.savedToast);
+        }, 'coin');
+      };
+
+      const handleMarkBonusReceived = (id) => {
+        soundEngine.play('coin');
+        setBonuses((prev) =>
+          prev.map((b) => {
+            if (b.id !== id) return b;
+            const upd = { ...b, received_amount: b.expected_amount };
+            SilentSync.enqueue({ type: 'upsert_bonus', payload: upd });
+            return upd;
+          })
+        );
+      };
+
+      const handleDeleteBonus = (id) => {
+        runWithLoader(() => {
+          setBonuses((prev) => prev.filter((b) => b.id !== id));
+          SilentSync.enqueue({ type: 'delete_bonus', payload: { id } });
+          showToast(t.deletedToast);
+        }, 'tap');
+      };
+
+      const updatePayrollField = (patch) => {
+        setPayroll((prev) => {
+          const next = { ...prev, ...patch };
+          if (profile?.id) {
+            SilentSync.enqueue({
+              type: 'upsert_payroll',
+              payload: { user_id: profile.id, ...next },
+            });
+          }
+          return next;
+        });
+      };
+
+      /* =======================================================================
+         COMPUTED AGGREGATIONS (ZERO DOUBLE-COUNTING)
+         ======================================================================= */
+      const cycleRecordsList = useMemo(() => {
+        return Object.values(records)
+          .filter((r) => r.work_date >= cycle.startIso && r.work_date <= cycle.endIso)
+          .sort((a, b) => b.work_date.localeCompare(a.work_date));
+      }, [records, cycle]);
+
+      const allRecordsList = useMemo(() => {
+        return Object.values(records).sort((a, b) => b.work_date.localeCompare(a.work_date));
+      }, [records]);
+
+      const cycleBonuses = useMemo(
+        () => bonuses.filter((b) => b.cycle_key === cycle.cycleKey),
+        [bonuses, cycle.cycleKey]
+      );
+
+      // Mutually exclusive buckets so every worked day is counted ONCE:
+      // Priority: 1) Holiday x2 -> 2) Sunday -> 3) 12h/Custom -> 4) Standard 8h
+      const walletStats = useMemo(() => {
+        let holidaySum = 0, holidayDays = 0;
+        let sundaySum = 0, sundayDays = 0;
+        let longSum = 0, longDays = 0;
+        let normalSum = 0, normalDays = 0;
+        let paidWork = 0;
+        let grossWork = 0;
+
+        for (const r of cycleRecordsList) {
+          if (r.status !== 'present') continue;
+          const amt = Number(r.gross_amount || 0);
+          grossWork += amt;
+          if (r.is_paid) paidWork += amt;
+
+          if (r.is_holiday) {
+            holidaySum += amt;
+            holidayDays += 1;
+          } else if (r.is_sunday) {
+            sundaySum += amt;
+            sundayDays += 1;
+          } else if (r.shift_type === '12h' || r.shift_type === 'custom' || Number(r.hours_worked) > 8) {
+            longSum += amt;
+            longDays += 1;
+          } else {
+            normalSum += amt;
+            normalDays += 1;
+          }
+        }
+
+        const bonusesExpected = cycleBonuses.reduce((s, b) => s + Number(b.expected_amount || 0), 0);
+        const bonusesReceived = cycleBonuses.reduce((s, b) => s + Number(b.received_amount || 0), 0);
+
+        const totalGross = grossWork + bonusesExpected;
+        const totalPaid = paidWork + bonusesReceived;
+        const totalRemaining = Math.max(0, totalGross - totalPaid);
+
+        return {
+          holidaySum, holidayDays,
+          sundaySum, sundayDays,
+          longSum, longDays,
+          normalSum, normalDays,
+          grossWork,
+          bonusesExpected,
+          bonusesReceived,
+          bonusesMissing: Math.max(0, bonusesExpected - bonusesReceived),
+          totalGross,
+          totalPaid,
+          totalRemaining,
+        };
+      }, [cycleRecordsList, cycleBonuses]);
+
+      // Payroll Net Computation
+      const payrollCalc = useMemo(() => {
+        const totalGross = walletStats.grossWork + walletStats.bonusesReceived;
+        const cnssBase = Math.min(totalGross, 6000);
+        const cnssDed = payroll.cnss_enabled ? Number((cnssBase * 0.0448).toFixed(2)) : 0;
+        const amoDed = payroll.amo_enabled ? Number((totalGross * 0.0226).toFixed(2)) : 0;
+        const advanceDed = Number(payroll.salary_advance || 0);
+        const netToPay = Math.max(0, Number((totalGross - cnssDed - amoDed - advanceDed).toFixed(2)));
+        return { totalGross, cnssDed, amoDed, advanceDed, netToPay };
+      }, [walletStats, payroll]);
+
+      // Salary Simulator Computation
+      const simCalc = useMemo(() => {
+        const targetGross = Math.max(0, Number(simGross || 0));
+        const dailyRate = Number(payroll.daily_rate || profile?.daily_rate || 143.36);
+        const absDays = Math.max(0, Number(simAbsences || 0));
+        const absenceCost = Number((absDays * dailyRate).toFixed(2));
+        const adjustedGross = Math.max(0, targetGross - absenceCost);
+        const cnssDed = simCnss ? Number((Math.min(adjustedGross, 6000) * 0.0448).toFixed(2)) : 0;
+        const amoDed = simAmo ? Number((adjustedGross * 0.0226).toFixed(2)) : 0;
+        const advDed = Math.max(0, Number(simAdvance || 0));
+        const customDed = Math.max(0, Number(simCustomDed || 0));
+        const totalDeductions = Number((absenceCost + cnssDed + amoDed + advDed + customDed).toFixed(2));
+        const netRemaining = Math.max(0, Number((targetGross - totalDeductions).toFixed(2)));
+        return { targetGross, absenceCost, cnssDed, amoDed, advDed, customDed, totalDeductions, netRemaining };
+      }, [simGross, simAbsences, simAdvance, simCustomDed, simCnss, simAmo, payroll, profile]);
+
+      // Filtered History
+      const filteredHistory = useMemo(() => {
+        const base = historyScope === 'cycle' ? cycleRecordsList : allRecordsList;
+        return base.filter((r) => {
+          if (historyFilter === 'all') return true;
+          if (historyFilter === 'absent') return r.status === 'absent';
+          if (historyFilter === 'paid') return r.status === 'present' && r.is_paid;
+          if (historyFilter === 'unpaid') return r.status === 'present' && !r.is_paid;
+          if (historyFilter === 'sunday') return r.status === 'present' && r.is_sunday;
+          if (historyFilter === 'holiday') return r.status === 'present' && r.is_holiday;
+          if (historyFilter === 'long')
+            return r.status === 'present' && (r.shift_type === '12h' || r.shift_type === 'custom' || Number(r.hours_worked) > 8);
+          if (historyFilter === 'h8')
+            return r.status === 'present' && Number(r.hours_worked) <= 8 && !r.is_holiday && !r.is_sunday;
+          return true;
+        });
+      }, [historyScope, historyFilter, cycleRecordsList, allRecordsList]);
+
+      /* =======================================================================
+         1-CLICK EXCEL EXPORT (100% PURE ACTIVE LANGUAGE)
+         ======================================================================= */
+      const handleExportExcel = () => {
+        setDrawerOpen(false);
+        runWithLoader(() => {
+          if (!window.XLSX) return;
+          const rows = cycleRecordsList.map((r) => [
+            r.work_date,
+            r.status === 'absent' ? t.absentLabel : t.legendPresent,
+            r.status === 'absent'
+              ? '-'
+              : r.shift_type === '12h'
+              ? t.shift12h
+              : r.shift_type === 'custom'
+              ? t.shiftCustom
+              : t.shifts[profile?.shift_category || 'normal'],
+            r.start_time || '-',
+            r.end_time || '-',
+            Number(r.hours_worked || 0),
+            r.is_holiday ? t.yes : t.no,
+            r.is_sunday ? t.yes : t.no,
+            Number(r.gross_amount || 0),
+            r.status === 'absent' ? '-' : r.is_paid ? t.paidStatus : t.unpaidStatus,
+          ]);
+          const sheetData = [t.excelHeaders, ...rows];
+          const ws = window.XLSX.utils.aoa_to_sheet(sheetData);
+          if (lang === 'ar') {
+            ws['!views'] = [{ RTL: true }];
+          }
+          const wb = window.XLSX.utils.book_new();
+          window.XLSX.utils.book_append_sheet(wb, ws, t.excelSheetName);
+          window.XLSX.writeFile(wb, `CheckDay_${cycle.cycleKey}_${lang.toUpperCase()}.xlsx`);
+          showToast(t.exportedToast);
+        }, 'success');
+      };
+
+      /* =======================================================================
+         RENDER HELPERS: MAINTENANCE / SUSPENDED / PIN LOCK / AUTH
+         ======================================================================= */
+      if (appConfig.maintenance_mode) {
+        const msg =
+          lang === 'ar'
+            ? appConfig.maintenance_message_ar
+            : lang === 'fr'
+            ? appConfig.maintenance_message_fr
+            : appConfig.maintenance_message_en;
+        return (
+          <div className={`min-h-screen flex items-center justify-center p-6 bg-[#EEF2F7] ${t.fontClass}`} dir={t.dir}>
+            <div className="fintech-card max-w-sm w-full p-8 text-center animate-fade-up">
+              <div className="flex justify-center mb-5"><CheckDayLogo size={54} showWordmark={false} /></div>
+              <h1 className="text-xl font-extrabold text-[#0B1D3A] mb-2">{t.maintenanceTitle}</h1>
+              <p className="text-sm text-slate-600 leading-relaxed">{msg}</p>
+            </div>
+          </div>
+        );
+      }
+
+      // Local PIN Unlock Screen
+      if (profile && pinHash && !isPinUnlocked) {
+        return (
+          <div className={`min-h-screen hero-gradient flex flex-col items-center justify-center p-6 text-white ${t.fontClass}`} dir={t.dir}>
+            <div className="mb-6"><CheckDayLogo size={54} light /></div>
+            <h2 className="text-xl font-bold mb-1">{t.pinUnlockTitle}</h2>
+            <p className="text-sm text-slate-300 mb-6">{t.pinUnlockSub}</p>
+            <div className="flex gap-4 mb-3" dir="ltr">
+              {[0, 1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className={`w-4 h-4 rounded-full transition-all ${
+                    i < pinEntry.length ? 'bg-[#00C29A] scale-110' : 'bg-white/25'
+                  }`}
+                />
+              ))}
+            </div>
+            {pinError && <p className="text-xs text-rose-300 font-semibold mb-3">{t.pinWrong}</p>}
+            <div className="grid grid-cols-3 gap-3.5 max-w-[260px] w-full mt-4" dir="ltr">
+              {['1','2','3','4','5','6','7','8','9'].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => handlePinDigit(d)}
+                  className="h-14 rounded-2xl bg-white/10 hover:bg-white/20 active:scale-[0.95] text-xl font-bold font-mono-num flex items-center justify-center transition"
+                >
+                  {d}
+                </button>
+              ))}
+              <button
+                onClick={() => { soundEngine.play('tap'); setPinEntry(''); }}
+                className="h-14 rounded-2xl bg-white/5 hover:bg-white/15 active:scale-[0.95] text-xs font-semibold flex items-center justify-center transition"
+              >
+                {t.pinClear}
+              </button>
+              <button
+                onClick={() => handlePinDigit('0')}
+                className="h-14 rounded-2xl bg-white/10 hover:bg-white/20 active:scale-[0.95] text-xl font-bold font-mono-num flex items-center justify-center transition"
+              >
+                0
+              </button>
+              <button
+                onClick={() => { soundEngine.play('tap'); setPinEntry((p) => p.slice(0, -1)); }}
+                className="h-14 rounded-2xl bg-white/5 hover:bg-white/15 active:scale-[0.95] flex items-center justify-center transition"
+              >
+                <i className="fi fi-sr-delete text-lg"></i>
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      // Auth & Profile Setup Flow
+      if (!profile) {
+        return (
+          <div className={`min-h-screen bg-[#EEF2F7] flex flex-col items-center justify-center p-4 ${t.fontClass}`} dir={t.dir}>
+            {/* Language Switcher Pill */}
+            <div className="mb-5 flex items-center gap-1.5 bg-white/90 p-1.5 rounded-full shadow-card border border-slate-200/80" dir="ltr">
+              {(['ar', 'fr', 'en']).map((code) => (
+                <button
+                  key={code}
+                  onClick={() => runWithLoader(() => setLang(code), 'nav')}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition active:scale-[0.97] ${
+                    lang === code ? 'bg-[#0B1D3A] text-white' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  {code === 'ar' ? 'العربية' : code === 'fr' ? 'Français' : 'English'}
+                </button>
+              ))}
+            </div>
+
+            <div className="fintech-card max-w-md w-full p-6 sm:p-7 animate-fade-up">
+              <div className="flex justify-center mb-5"><CheckDayLogo size={46} /></div>
+
+              {authStage === 'welcome' && (
+                <div>
+                  <h1 className="text-xl font-extrabold text-center text-[#0B1D3A] mb-1.5">{t.welcomeTitle}</h1>
+                  <p className="text-sm text-slate-500 text-center mb-6 leading-relaxed">{t.welcomeSub}</p>
+
+                  <div className="space-y-3">
+                    <button
+                      onClick={handleGoogleSignIn}
+                      className="w-full py-3.5 px-4 rounded-2xl bg-[#0B1D3A] text-white font-bold text-sm flex items-center justify-center gap-3 shadow-md active:scale-[0.97] transition"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24">
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                        <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58l3.76 2.91c2.2-2.02 3.66-5.01 3.66-8.73z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                        <path fill="#34A853" d="M12 23c3.24 0 5.95-1.08 7.93-2.91l-3.76-2.91c-1.08.72-2.45 1.16-4.17 1.16-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                      </svg>
+                      <span>{t.signInGoogle}</span>
+                    </button>
+
+                    <button
+                      onClick={() => { soundEngine.play('tap'); setAuthStage('phone'); }}
+                      className="w-full py-3.5 px-4 rounded-2xl bg-[#EEF2F7] text-[#0B1D3A] font-bold text-sm flex items-center justify-center gap-2.5 border border-slate-200 active:scale-[0.97] transition"
+                    >
+                      <i className="fi fi-sr-smartphone text-[#00C29A] text-base"></i>
+                      <span>{t.signInPhone}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {authStage === 'phone' && (
+                <form onSubmit={handlePhonePasswordAuth} className="space-y-4">
+                  <h2 className="text-lg font-extrabold text-center text-[#0B1D3A]">{t.signInPhone}</h2>
+                  <div className="grid grid-cols-2 gap-1.5 bg-[#EEF2F7] p-1 rounded-2xl">
+                    <button
+                      type="button"
+                      onClick={() => { soundEngine.play('tap'); setPhoneMode('login'); setPhoneAuthError(''); }}
+                      className={`py-2 rounded-xl text-xs font-extrabold transition ${
+                        phoneMode === 'login' ? 'bg-[#0B1D3A] text-white shadow-sm' : 'text-slate-600'
+                      }`}
+                    >
+                      {t.phoneLoginTab}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { soundEngine.play('tap'); setPhoneMode('register'); setPhoneAuthError(''); }}
+                      className={`py-2 rounded-xl text-xs font-extrabold transition ${
+                        phoneMode === 'register' ? 'bg-[#0B1D3A] text-white shadow-sm' : 'text-slate-600'
+                      }`}
+                    >
+                      {t.phoneRegisterTab}
+                    </button>
+                  </div>
+                  {phoneAuthError && (
+                    <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 text-center">
+                      {phoneAuthError}
+                    </div>
+                  )}
+                  <div>
+                    <input
+                      type="tel"
+                      required
+                      dir="ltr"
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      placeholder={t.phonePlaceholder}
+                      className="w-full px-4 py-3.5 rounded-2xl bg-[#EEF2F7] border border-slate-200 text-center font-mono-num text-base font-semibold focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">{t.passwordLabel}</label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      dir="ltr"
+                      value={phonePassword}
+                      onChange={(e) => setPhonePassword(e.target.value)}
+                      placeholder={t.passwordPlaceholder}
+                      className="w-full px-4 py-3.5 rounded-2xl bg-[#EEF2F7] border border-slate-200 text-center font-mono-num text-base font-semibold focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full py-3.5 rounded-2xl bg-[#00C29A] text-[#0B1D3A] font-extrabold text-sm active:scale-[0.97] transition"
+                  >
+                    {phoneMode === 'register' ? t.createPhoneAccount : t.sendOtp}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { soundEngine.play('tap'); setAuthStage('welcome'); setPhoneAuthError(''); }}
+                    className="w-full py-2.5 text-xs font-bold text-slate-500"
+                  >
+                    {t.backBtn}
+                  </button>
+                </form>
+              )}
+
+              {authStage === 'setup' && (
+                <form onSubmit={handleCompleteSetup} className="space-y-4">
+                  <div className="text-center">
+                    <h2 className="text-lg font-extrabold text-[#0B1D3A]">{t.setupTitle}</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">{t.setupSub}</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">{t.fullName}</label>
+                    <input
+                      type="text"
+                      required
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      placeholder={t.fullNamePh}
+                      className="w-full px-4 py-3 rounded-2xl bg-[#EEF2F7] border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">{t.matricule}</label>
+                    <input
+                      type="text"
+                      required
+                      dir="ltr"
+                      value={regMatricule}
+                      onChange={(e) => setRegMatricule(e.target.value)}
+                      placeholder={t.matriculePh}
+                      className="w-full px-4 py-3 rounded-2xl bg-[#EEF2F7] border border-slate-200 text-sm font-mono-num font-semibold focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">{t.contractType}</label>
+                      <select
+                        value={regContract}
+                        onChange={(e) => handleContractChange(e.target.value)}
+                        className="w-full px-3.5 py-3 rounded-2xl bg-[#EEF2F7] border border-slate-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                      >
+                        <option value="ANAPEC">{t.contracts.ANAPEC}</option>
+                        <option value="CDD">{t.contracts.CDD}</option>
+                        <option value="CDI">{t.contracts.CDI}</option>
+                        <option value="AUTRE">{t.contracts.AUTRE}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">{t.dailyRate8h}</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        dir="ltr"
+                        value={regDailyRate}
+                        onChange={(e) => setRegDailyRate(e.target.value)}
+                        className="w-full px-3.5 py-3 rounded-2xl bg-[#EEF2F7] border border-slate-200 text-sm font-mono-num font-bold focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200/70 flex items-center justify-between text-xs">
+                    <span className="font-semibold text-emerald-900">{t.hourlyRate}</span>
+                    <LtrNum className="font-bold text-emerald-700">
+                      {fmtMoney(Number(regDailyRate || 0) / 8, t.currency)}
+                    </LtrNum>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-2">{t.shiftCategory}</label>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {(['normal', 'A', 'B', 'C']).map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => { soundEngine.play('tap'); setRegShift(cat); }}
+                          className={`py-3 px-3 rounded-2xl text-xs font-extrabold border transition active:scale-[0.97] ${
+                            regShift === cat
+                              ? 'bg-[#0B1D3A] text-white border-[#0B1D3A] shadow-sm'
+                              : 'bg-[#EEF2F7] text-[#0B1D3A] border-slate-200'
+                          }`}
+                        >
+                          {t.shifts[cat]}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-2">{t.shiftLockedNote}</p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3.5 rounded-2xl bg-[#00C29A] text-[#0B1D3A] font-extrabold text-sm shadow-md active:scale-[0.97] transition"
+                  >
+                    {t.completeSetup}
+                  </button>
+                </form>
+              )}
+            </div>
+
+            {loadingOverlay && (
+              <div className="fixed inset-0 z-50 bg-[#0B1D3A]/35 backdrop-blur-sm flex items-center justify-center">
+                <div className="bg-white/95 rounded-3xl px-7 py-6 shadow-2xl flex flex-col items-center gap-3">
+                  <div className="loader-ring"><CheckDayLogo size={46} showWordmark={false} /></div>
+                  <span className="text-xs font-bold text-[#0B1D3A]">{t.loading}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // Suspended Account Guard
+      if (profile.account_status === 'suspended') {
+        return (
+          <div className={`min-h-screen flex items-center justify-center p-6 bg-[#EEF2F7] ${t.fontClass}`} dir={t.dir}>
+            <div className="fintech-card max-w-sm w-full p-8 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+                <i className="fi fi-sr-ban text-2xl"></i>
+              </div>
+              <h1 className="text-lg font-extrabold text-[#0B1D3A] mb-2">{t.suspendedTitle}</h1>
+              <p className="text-sm text-slate-500 mb-6">{t.suspendedBody}</p>
+              <button
+                onClick={handleLogout}
+                className="px-5 py-2.5 rounded-xl bg-[#0B1D3A] text-white text-xs font-bold active:scale-[0.97]"
+              >
+                {t.logoutBtn}
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      /* =======================================================================
+         MAIN OPERATOR INTERFACE
+         ======================================================================= */
+      const existingSelected = records[selectedDate] || null;
+      const selectedDow = getDayOfWeek(selectedDate);
+      const isNormalCategory = profile.shift_category === 'normal';
+      const activeAnnouncement = announcements[0] || null;
+
+      return (
+        <div className={`min-h-screen bg-[#EEF2F7] pb-28 ${t.fontClass}`} dir={t.dir}>
+          {/* FIXED TOP HEADER (dir="ltr" so positions stay physically fixed across languages) */}
+          <header
+            dir="ltr"
+            className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 h-16 flex items-center justify-between max-w-xl mx-auto"
+          >
+            <CheckDayLogo size={34} />
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const order = ['ar', 'fr', 'en'];
+                  const next = order[(order.indexOf(lang) + 1) % order.length];
+                  runWithLoader(() => setLang(next), 'nav');
+                }}
+                className="h-9 px-3 rounded-xl bg-[#EEF2F7] text-[#0B1D3A] text-xs font-extrabold active:scale-[0.97] transition"
+                aria-label="Switch Language"
+              >
+                {lang.toUpperCase()}
+              </button>
+              <button
+                onClick={() => { soundEngine.play('tap'); setDrawerOpen(true); }}
+                className="w-10 h-10 rounded-xl bg-[#0B1D3A] text-white flex items-center justify-center active:scale-[0.95] transition shadow-sm"
+                aria-label="Open Menu"
+              >
+                <i className="fi fi-sr-menu-burger text-base leading-none"></i>
+              </button>
+            </div>
+          </header>
+
+          {/* MAIN CONTENT CONTAINER */}
+          <main className="max-w-xl mx-auto px-4 pt-4 space-y-4">
+            {/* Global Live Announcement Banner (from Owner Admin Panel) */}
+            {activeAnnouncement && (
+              <div
+                className={`rounded-2xl px-4 py-3 flex items-start gap-3 text-xs font-semibold shadow-sm animate-fade-up ${
+                  activeAnnouncement.severity === 'urgent'
+                    ? 'bg-rose-50 text-rose-900 border border-rose-200'
+                    : activeAnnouncement.severity === 'warning'
+                    ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                    : 'bg-emerald-50 text-emerald-950 border border-emerald-200'
+                }`}
+              >
+                <i className="fi fi-sr-megaphone text-base mt-0.5 shrink-0"></i>
+                <div>
+                  <div className="font-extrabold">
+                    {lang === 'ar'
+                      ? activeAnnouncement.title_ar
+                      : lang === 'fr'
+                      ? activeAnnouncement.title_fr
+                      : activeAnnouncement.title_en}
+                  </div>
+                  <div className="opacity-85 mt-0.5">
+                    {lang === 'ar'
+                      ? activeAnnouncement.body_ar
+                      : lang === 'fr'
+                      ? activeAnnouncement.body_fr
+                      : activeAnnouncement.body_en}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Force Update Banner */}
+            {appConfig.force_update && (
+              <div className="rounded-2xl px-4 py-3 bg-[#0B1D3A] text-white flex items-center justify-between gap-3 text-xs font-bold">
+                <span>{t.forceUpdateBanner}</span>
+                {appConfig.update_url && (
+                  <a
+                    href={appConfig.update_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 rounded-xl bg-[#00C29A] text-[#0B1D3A] font-extrabold shrink-0"
+                  >
+                    {t.updateNow}
+                  </a>
+                )}
+              </div>
+            )}
+
+            {/* ===============================================================
+                OVERLAY SCREENS (SIMULATOR, FAQ, ABOUT)
+               =============================================================== */}
+            {activeOverlayScreen === 'simulator' && (
+              <div className="space-y-4 animate-fade-up">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-lg font-extrabold text-[#0B1D3A]">{t.simTitle}</h1>
+                    <p className="text-xs text-slate-500">{t.simSubtitle}</p>
+                  </div>
+                  <button
+                    onClick={() => { soundEngine.play('tap'); setActiveOverlayScreen(null); }}
+                    className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-[#0B1D3A] active:scale-[0.97]"
+                  >
+                    {t.backBtn}
+                  </button>
+                </div>
+
+                {/* Result Hero */}
+                <div className="hero-gradient rounded-[24px] p-5 text-white shadow-hero">
+                  <div className="text-xs text-slate-300 font-semibold">{t.simNetRemaining}</div>
+                  <div className="text-3xl font-extrabold mt-1 text-[#6EE7D2]">
+                    <LtrNum>{fmtMoney(simCalc.netRemaining, t.currency)}</LtrNum>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-white/15 text-xs">
+                    <div>
+                      <div className="text-slate-300">{t.simTargetGross}</div>
+                      <div className="font-bold text-sm mt-0.5">
+                        <LtrNum>{fmtMoney(simCalc.targetGross, t.currency)}</LtrNum>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-300">{t.simTotalDed}</div>
+                      <div className="font-bold text-sm text-rose-300 mt-0.5">
+                        <LtrNum>-{fmtMoney(simCalc.totalDeductions, t.currency)}</LtrNum>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Controls Card */}
+                <div className="fintech-card p-5 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">{t.simTargetGross}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="10"
+                      dir="ltr"
+                      value={simGross}
+                      onChange={(e) => setSimGross(e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl bg-[#EEF2F7] font-mono-num font-bold text-base focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">{t.simAbsenceDays}</label>
+                      <div className="flex items-center gap-2 bg-[#EEF2F7] rounded-2xl p-1.5" dir="ltr">
+                        <button
+                          type="button"
+                          onClick={() => { soundEngine.play('tap'); setSimAbsences(String(Math.max(0, Number(simAbsences) - 1))); }}
+                          className="w-9 h-9 rounded-xl bg-white font-bold text-lg shadow-sm active:scale-[0.95]"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="0"
+                          value={simAbsences}
+                          onChange={(e) => setSimAbsences(e.target.value)}
+                          className="w-full text-center bg-transparent font-mono-num font-bold text-base focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => { soundEngine.play('tap'); setSimAbsences(String(Number(simAbsences) + 1)); }}
+                          className="w-9 h-9 rounded-xl bg-white font-bold text-lg shadow-sm active:scale-[0.95]"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">{t.simAdvance}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        dir="ltr"
+                        value={simAdvance}
+                        onChange={(e) => setSimAdvance(e.target.value)}
+                        className="w-full px-3.5 py-3 rounded-2xl bg-[#EEF2F7] font-mono-num font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">{t.simCustomDed}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      dir="ltr"
+                      value={simCustomDed}
+                      onChange={(e) => setSimCustomDed(e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl bg-[#EEF2F7] font-mono-num font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                    />
+                  </div>
+
+                  <div className="space-y-2.5 pt-1">
+                    <label className="flex items-center justify-between p-3 rounded-2xl bg-[#EEF2F7] cursor-pointer">
+                      <span className="text-xs font-bold text-[#0B1D3A]">{t.cnssLabel}</span>
+                      <input
+                        type="checkbox"
+                        checked={simCnss}
+                        onChange={(e) => { soundEngine.play('tap'); setSimCnss(e.target.checked); }}
+                        className="w-5 h-5 accent-[#00C29A]"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between p-3 rounded-2xl bg-[#EEF2F7] cursor-pointer">
+                      <span className="text-xs font-bold text-[#0B1D3A]">{t.amoLabel}</span>
+                      <input
+                        type="checkbox"
+                        checked={simAmo}
+                        onChange={(e) => { soundEngine.play('tap'); setSimAmo(e.target.checked); }}
+                        className="w-5 h-5 accent-[#00C29A]"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Breakdown Table */}
+                  <div className="pt-3 border-t border-slate-100 space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">{t.simAbsenceCost}</span>
+                      <LtrNum className="font-bold text-rose-600">-{fmtMoney(simCalc.absenceCost, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">{t.cnssDeduction}</span>
+                      <LtrNum className="font-bold text-rose-600">-{fmtMoney(simCalc.cnssDed, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">{t.amoDeduction}</span>
+                      <LtrNum className="font-bold text-rose-600">-{fmtMoney(simCalc.amoDed, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">{t.advanceDeduction}</span>
+                      <LtrNum className="font-bold text-rose-600">-{fmtMoney(simCalc.advDed, t.currency)}</LtrNum>
+                    </div>
+                    {simCalc.customDed > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">{t.simCustomDed}</span>
+                        <LtrNum className="font-bold text-rose-600">-{fmtMoney(simCalc.customDed, t.currency)}</LtrNum>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeOverlayScreen === 'faq' && (
+              <FaqScreen t={t} onClose={() => { soundEngine.play('tap'); setActiveOverlayScreen(null); }} />
+            )}
+
+            {activeOverlayScreen === 'about' && (
+              <div className="space-y-4 animate-fade-up">
+                <div className="flex items-center justify-between">
+                  <h1 className="text-lg font-extrabold text-[#0B1D3A]">{t.aboutTitle}</h1>
+                  <button
+                    onClick={() => { soundEngine.play('tap'); setActiveOverlayScreen(null); }}
+                    className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-[#0B1D3A] active:scale-[0.97]"
+                  >
+                    {t.backBtn}
+                  </button>
+                </div>
+
+                <div className="hero-gradient rounded-[24px] p-6 text-white text-center shadow-hero">
+                  <div className="flex justify-center mb-3"><CheckDayLogo size={54} light /></div>
+                  <p className="text-xs text-slate-200 leading-relaxed mt-2">{t.aboutIntro}</p>
+                  <div className="inline-flex items-center gap-2 mt-4 px-3.5 py-1.5 rounded-full bg-white/15 text-xs font-bold">
+                    <span>{t.versionLabel}</span>
+                    <LtrNum className="text-[#6EE7D2]">v{APP_VERSION}</LtrNum>
+                  </div>
+                </div>
+
+                <div className="fintech-card p-5 space-y-4">
+                  <div>
+                    <h2 className="text-sm font-extrabold text-[#0B1D3A] mb-1.5">{t.aboutWhyTitle}</h2>
+                    <p className="text-xs text-slate-600 leading-relaxed">{t.aboutWhyBody}</p>
+                  </div>
+
+                  <div>
+                    <h2 className="text-sm font-extrabold text-[#0B1D3A] mb-2">{t.aboutFeaturesTitle}</h2>
+                    <ul className="space-y-2">
+                      {t.aboutFeatures.map((feat, i) => (
+                        <li key={i} className="flex items-start gap-2.5 text-xs text-slate-600 leading-relaxed">
+                          <i className="fi fi-sr-check-circle text-[#00C29A] mt-0.5 shrink-0"></i>
+                          <span>{feat}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-100 text-center">
+                    <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#EEF2F7] text-[#0B1D3A] text-xs font-extrabold">
+                      <i className="fi fi-sr-sparkles text-[#00C29A]"></i>
+                      <span>{t.developerCredit}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===============================================================
+                TAB 1: RECORD TAB
+               =============================================================== */}
+            {!activeOverlayScreen && activeTab === 'record' && (
+              <div className="space-y-4 animate-fade-up">
+                {/* Gradient Hero Card */}
+                <div className="hero-gradient rounded-[24px] p-5 text-white shadow-hero relative overflow-hidden">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-base font-extrabold leading-tight">{profile.full_name}</div>
+                      <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-slate-200">
+                        <span className="px-2.5 py-0.5 rounded-full bg-white/15 font-bold">
+                          <LtrNum>#{profile.matricule}</LtrNum>
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-[#00C29A]/25 text-[#6EE7D2] font-bold">
+                          {t.shifts[profile.shift_category]}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-end shrink-0">
+                      <div className="text-[10px] text-slate-300 font-semibold">{t.moroccoTime}</div>
+                      <LtrNum className="text-base font-bold text-[#6EE7D2] mt-0.5">{nowMa.time}</LtrNum>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3.5 border-t border-white/15 flex items-end justify-between gap-2">
+                    <div>
+                      <div className="text-[11px] text-slate-300">{t.cycleLabel}</div>
+                      <LtrNum className="text-xs font-bold text-white mt-0.5">
+                        {cycle.startIso} → {cycle.endIso}
+                      </LtrNum>
+                    </div>
+                    <div className="text-end">
+                      <div className="text-[11px] text-slate-300">{t.dayEstimate}</div>
+                      <LtrNum className="text-lg font-extrabold text-[#00C29A]">
+                        {fmtMoney(dayPreview.gross, t.currency)}
+                      </LtrNum>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Smart Auto-Detection Banners */}
+                {dayPreview.isHoliday && (
+                  <div className="rounded-2xl px-4 py-3 bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs font-bold flex items-center gap-2.5">
+                    <i className="fi fi-sr-star text-[#00C29A] text-base"></i>
+                    <span>{t.holidayBanner} ({dayPreview.holidayName})</span>
+                  </div>
+                )}
+                {!dayPreview.isHoliday && dayPreview.isSunday && (
+                  <div className="rounded-2xl px-4 py-3 bg-indigo-50 border border-indigo-200 text-indigo-950 text-xs font-bold flex items-center gap-2.5">
+                    <i className="fi fi-sr-sun text-indigo-600 text-base"></i>
+                    <span>{t.sundayBanner}</span>
+                  </div>
+                )}
+                {isNormalCategory && selectedDow === 5 && (
+                  <div className="rounded-2xl px-4 py-3 bg-sky-50 border border-sky-200 text-sky-950 text-xs font-bold flex items-center gap-2.5">
+                    <i className="fi fi-sr-clock text-sky-600 text-base"></i>
+                    <span>{t.fridayFlexBanner}</span>
+                  </div>
+                )}
+                {isNormalCategory && selectedDow === 6 && (
+                  <div className="rounded-2xl px-4 py-3 bg-sky-50 border border-sky-200 text-sky-950 text-xs font-bold flex items-center gap-2.5">
+                    <i className="fi fi-sr-clock text-sky-600 text-base"></i>
+                    <span>{t.saturdayFlexBanner}</span>
+                  </div>
+                )}
+                {selectedShiftType === '12h' && (
+                  <div className="rounded-2xl px-4 py-3 bg-amber-50 border border-amber-200 text-amber-950 text-xs font-bold flex items-center gap-2.5">
+                    <i className="fi fi-sr-bolt text-amber-600 text-base"></i>
+                    <span>{t.shift12hBanner}</span>
+                  </div>
+                )}
+
+                {/* Date Picker + Shift Selector Card */}
+                <div className="fintech-card p-5 space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-bold text-slate-500">{t.selectedDate}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <LtrNum className="text-sm font-extrabold text-[#0B1D3A]">{selectedDate}</LtrNum>
+                        {selectedDate === todayIso && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold">
+                            {t.todayBadge}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <input
+                      type="date"
+                      max={todayIso}
+                      value={selectedDate}
+                      onChange={(e) => e.target.value && handleSelectDate(e.target.value)}
+                      className="px-3 py-2 rounded-xl bg-[#EEF2F7] border border-slate-200 text-xs font-mono-num font-bold text-[#0B1D3A] focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                    />
+                  </div>
+
+                  {/* Current Status Banner (Reversible Absence!) */}
+                  {existingSelected && (
+                    <div
+                      className={`rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-2 text-xs font-bold ${
+                        existingSelected.status === 'absent'
+                          ? 'bg-rose-50 border border-rose-200 text-rose-900'
+                          : 'bg-emerald-50 border border-emerald-200 text-emerald-900'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <i
+                          className={`fi ${
+                            existingSelected.status === 'absent'
+                              ? 'fi-sr-cross-circle text-rose-600'
+                              : 'fi-sr-check-circle text-[#00C29A]'
+                          } text-base`}
+                        ></i>
+                        <span>
+                          {existingSelected.status === 'absent'
+                            ? t.dayRecordedAbsent
+                            : t.dayRecordedPresent}
+                        </span>
+                      </div>
+
+                      {existingSelected.status === 'absent' ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleRemoveRecord(selectedDate)}
+                            className="px-3 py-1.5 rounded-xl bg-white border border-rose-200 text-rose-700 font-extrabold active:scale-[0.97]"
+                          >
+                            {t.undoAbsence}
+                          </button>
+                          <button
+                            onClick={() => handleSwitchAbsentToPresent(selectedDate)}
+                            className="px-3 py-1.5 rounded-xl bg-[#00C29A] text-[#0B1D3A] font-extrabold active:scale-[0.97]"
+                          >
+                            {t.switchToPresent}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleRemoveRecord(selectedDate)}
+                          className="px-3 py-1.5 rounded-xl bg-white border border-emerald-200 text-rose-600 font-extrabold active:scale-[0.97]"
+                        >
+                          {t.deleteRecord}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Shift Cards */}
+                  <div>
+                    <div className="text-xs font-bold text-slate-500 mb-2">{t.chooseShift}</div>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {isNormalCategory ? (
+                        <>
+                          <button
+                            onClick={() => { soundEngine.play('tap'); setSelectedShiftType('normal'); }}
+                            className={`p-3 rounded-2xl border text-start transition active:scale-[0.97] ${
+                              selectedShiftType === 'normal'
+                                ? 'bg-[#0B1D3A] text-white border-[#0B1D3A]'
+                                : 'bg-[#EEF2F7] text-[#0B1D3A] border-slate-200'
+                            }`}
+                          >
+                            <div className="text-xs font-extrabold">{t.shiftNormal8h}</div>
+                            <LtrNum className="text-[11px] opacity-75 mt-0.5">08:30 - {normalExitTime}</LtrNum>
+                          </button>
+                          <button
+                            onClick={() => { soundEngine.play('tap'); setSelectedShiftType('12h'); }}
+                            className={`p-3 rounded-2xl border text-start transition active:scale-[0.97] ${
+                              selectedShiftType === '12h'
+                                ? 'bg-[#0B1D3A] text-white border-[#0B1D3A]'
+                                : 'bg-[#EEF2F7] text-[#0B1D3A] border-slate-200'
+                            }`}
+                          >
+                            <div className="text-xs font-extrabold">{t.shift12h}</div>
+                            <LtrNum className="text-[11px] opacity-75 mt-0.5">12 {t.hoursUnit}</LtrNum>
+                          </button>
+                          <button
+                            onClick={() => { soundEngine.play('tap'); setSelectedShiftType('custom'); }}
+                            className={`col-span-2 p-3 rounded-2xl border text-start transition active:scale-[0.97] ${
+                              selectedShiftType === 'custom'
+                                ? 'bg-[#0B1D3A] text-white border-[#0B1D3A]'
+                                : 'bg-[#EEF2F7] text-[#0B1D3A] border-slate-200'
+                            }`}
+                          >
+                            <div className="text-xs font-extrabold">{t.shiftCustom}</div>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {[
+                            { id: 'morning', label: t.shiftMorning },
+                            { id: 'afternoon', label: t.shiftAfternoon },
+                            { id: 'night', label: t.shiftNight },
+                            { id: '12h', label: t.shift12h },
+                            { id: 'custom', label: t.shiftCustom },
+                          ].map((opt) => (
+                            <button
+                              key={opt.id}
+                              onClick={() => { soundEngine.play('tap'); setSelectedShiftType(opt.id); }}
+                              className={`p-3 rounded-2xl border text-start transition active:scale-[0.97] ${
+                                opt.id === 'custom' ? 'col-span-2' : ''
+                              } ${
+                                selectedShiftType === opt.id
+                                  ? 'bg-[#0B1D3A] text-white border-[#0B1D3A]'
+                                  : 'bg-[#EEF2F7] text-[#0B1D3A] border-slate-200'
+                              }`}
+                            >
+                              <div className="text-xs font-extrabold">{opt.label}</div>
+                            </button>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Flexible Exit Time for Shift Normal */}
+                  {isNormalCategory && selectedShiftType === 'normal' && (
+                    <div className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-[#EEF2F7]">
+                      <span className="text-xs font-bold text-[#0B1D3A]">{t.exitTimeLabel}</span>
+                      <div className="flex items-center gap-2" dir="ltr">
+                        {['16:30', '17:30', '18:30', '19:30'].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => { soundEngine.play('tap'); setNormalExitTime(preset); }}
+                            className={`px-2 py-1 rounded-lg text-[11px] font-mono-num font-bold ${
+                              normalExitTime === preset
+                                ? 'bg-[#0B1D3A] text-white'
+                                : 'bg-white text-slate-600'
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                        <input
+                          type="time"
+                          value={normalExitTime}
+                          onChange={(e) => setNormalExitTime(e.target.value)}
+                          className="px-2 py-1 rounded-lg bg-white text-xs font-mono-num font-bold border border-slate-200"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Custom Hours Input */}
+                  {selectedShiftType === 'custom' && (
+                    <div className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-[#EEF2F7]">
+                      <span className="text-xs font-bold text-[#0B1D3A]">{t.customHoursLabel}</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="24"
+                        step="0.5"
+                        dir="ltr"
+                        value={customHours}
+                        onChange={(e) => setCustomHours(e.target.value)}
+                        className="w-24 px-3 py-1.5 rounded-xl bg-white text-center font-mono-num font-bold text-sm border border-slate-200"
+                      />
+                    </div>
+                  )}
+
+                  {/* Present / Absent Action Buttons */}
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <button
+                      onClick={() => handleSaveAttendance('present')}
+                      className="py-3.5 px-4 rounded-2xl bg-[#00C29A] text-[#0B1D3A] font-extrabold text-sm flex items-center justify-center gap-2 shadow-sm active:scale-[0.97] transition"
+                    >
+                      <i className="fi fi-sr-check-circle text-base"></i>
+                      <span>{existingSelected?.status === 'present' ? t.updateRecord : t.markPresent}</span>
+                    </button>
+                    <button
+                      onClick={() => handleSaveAttendance('absent')}
+                      className="py-3.5 px-4 rounded-2xl bg-rose-50 text-rose-700 border border-rose-200 font-extrabold text-sm flex items-center justify-center gap-2 active:scale-[0.97] transition"
+                    >
+                      <i className="fi fi-sr-cross-circle text-base"></i>
+                      <span>{t.markAbsent}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 18-to-17 Cycle Calendar Grid with Locked Future Dates */}
+                <div className="fintech-card p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-sm font-extrabold text-[#0B1D3A]">{t.cycleCalendarTitle}</h2>
+                    <LtrNum className="text-[11px] font-bold text-slate-500">
+                      {cycle.startIso.slice(5)} → {cycle.endIso.slice(5)}
+                    </LtrNum>
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-1.5 text-center">
+                    {cycle.days.map((dIso) => {
+                      const isFuture = dIso > todayIso;
+                      const isToday = dIso === todayIso;
+                      const isSelected = dIso === selectedDate;
+                      const rec = records[dIso];
+                      const isHol = Boolean(holidayMap[dIso]);
+                      const dayNum = Number(dIso.slice(8, 10));
+                      const dow = getDayOfWeek(dIso);
+
+                      let cellStyle = 'bg-[#EEF2F7] text-[#0B1D3A]';
+                      if (isFuture) {
+                        cellStyle = 'bg-slate-100 text-slate-400 opacity-60 cursor-not-allowed';
+                      } else if (rec?.status === 'present') {
+                        cellStyle = 'bg-[#00C29A] text-[#0B1D3A] font-extrabold';
+                      } else if (rec?.status === 'absent') {
+                        cellStyle = 'bg-rose-500 text-white font-extrabold';
+                      } else if (isHol) {
+                        cellStyle = 'bg-emerald-50 text-emerald-800 border border-emerald-200';
+                      }
+
+                      return (
+                        <button
+                          key={dIso}
+                          type="button"
+                          disabled={isFuture}
+                          onClick={() => handleSelectDate(dIso)}
+                          className={`relative h-12 rounded-xl flex flex-col items-center justify-center transition ${cellStyle} ${
+                            isSelected ? 'ring-2 ring-[#0B1D3A] ring-offset-1 scale-[1.03]' : ''
+                          } ${isToday && !isSelected ? 'ring-1 ring-[#00C29A]' : ''}`}
+                        >
+                          <span className="text-[9px] opacity-70 leading-none">{t.weekdaysShort[dow]}</span>
+                          <LtrNum className="text-xs font-bold mt-0.5 leading-none">{dayNum}</LtrNum>
+                          {isFuture && (
+                            <i className="fi fi-sr-lock text-[8px] text-slate-400 absolute top-1 end-1"></i>
+                          )}
+                          {!isFuture && isHol && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 absolute top-1 end-1"></span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Legend */}
+                  <div className="flex flex-wrap items-center justify-center gap-3 mt-4 pt-3 border-t border-slate-100 text-[11px] font-semibold text-slate-500">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#00C29A]"></span>
+                      {t.legendPresent}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                      {t.legendAbsent}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                      {t.legendHoliday}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <i className="fi fi-sr-lock text-[10px] text-slate-400"></i>
+                      {t.legendLocked}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===============================================================
+                TAB 2: HISTORY TAB
+               =============================================================== */}
+            {!activeOverlayScreen && activeTab === 'history' && (
+              <div className="space-y-4 animate-fade-up">
+                <div className="flex items-center justify-between">
+                  <h1 className="text-lg font-extrabold text-[#0B1D3A]">{t.historyTitle}</h1>
+                  <div className="flex bg-white p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                    <button
+                      onClick={() => { soundEngine.play('tap'); setHistoryScope('cycle'); }}
+                      className={`px-3 py-1.5 rounded-lg transition ${
+                        historyScope === 'cycle' ? 'bg-[#0B1D3A] text-white' : 'text-slate-500'
+                      }`}
+                    >
+                      {t.currentCycle}
+                    </button>
+                    <button
+                      onClick={() => { soundEngine.play('tap'); setHistoryScope('all'); }}
+                      className={`px-3 py-1.5 rounded-lg transition ${
+                        historyScope === 'all' ? 'bg-[#0B1D3A] text-white' : 'text-slate-500'
+                      }`}
+                    >
+                      {t.allRecords}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter Chips */}
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                  {['all', 'unpaid', 'paid', 'sunday', 'long', 'h8', 'holiday', 'absent'].map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => { soundEngine.play('tap'); setHistoryFilter(f); }}
+                      className={`px-3.5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition active:scale-[0.97] ${
+                        historyFilter === f
+                          ? 'bg-[#0B1D3A] text-white shadow-sm'
+                          : 'bg-white text-slate-600 border border-slate-200'
+                      }`}
+                    >
+                      {t.filters[f]}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Records List */}
+                {filteredHistory.length === 0 ? (
+                  <div className="fintech-card p-10 text-center">
+                    <i className="fi fi-sr-calendar-clock text-3xl text-slate-300"></i>
+                    <p className="text-xs font-bold text-slate-500 mt-3">{t.noRecords}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredHistory.map((r) => (
+                      <div key={r.work_date} className="fintech-card p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <LtrNum className="text-sm font-extrabold text-[#0B1D3A]">{r.work_date}</LtrNum>
+                              {r.is_holiday && (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold">
+                                  ×2
+                                </span>
+                              )}
+                              {r.is_sunday && (
+                                <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[10px] font-extrabold">
+                                  {t.filters.sunday}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-1">
+                              {r.status === 'absent' ? (
+                                <span className="text-rose-600 font-bold">{t.absentLabel}</span>
+                              ) : (
+                                <>
+                                  <LtrNum>{r.start_time} - {r.end_time}</LtrNum> ·{' '}
+                                  <LtrNum>{r.hours_worked} {t.hoursUnit}</LtrNum>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="text-end">
+                            <LtrNum
+                              className={`text-base font-extrabold ${
+                                r.status === 'absent' ? 'text-rose-500' : 'text-[#0B1D3A]'
+                              }`}
+                            >
+                              {fmtMoney(r.gross_amount, t.currency)}
+                            </LtrNum>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-slate-100">
+                          {r.status === 'absent' ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleRemoveRecord(r.work_date)}
+                                className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 text-xs font-extrabold active:scale-[0.97]"
+                              >
+                                {t.undoAbsence}
+                              </button>
+                              <button
+                                onClick={() => handleSwitchAbsentToPresent(r.work_date)}
+                                className="px-3 py-1.5 rounded-xl bg-[#00C29A] text-[#0B1D3A] text-xs font-extrabold active:scale-[0.97]"
+                              >
+                                {t.switchToPresent}
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleTogglePaid(r.work_date)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 active:scale-[0.97] transition ${
+                                r.is_paid
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              <i className={`fi ${r.is_paid ? 'fi-sr-check-circle' : 'fi-sr-time-fast'}`}></i>
+                              <span>{r.is_paid ? t.paidStatus : t.unpaidStatus}</span>
+                            </button>
+                          )}
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                soundEngine.play('tap');
+                                setSelectedDate(r.work_date);
+                                setActiveTab('record');
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-[#EEF2F7] text-[#0B1D3A] text-xs font-bold active:scale-[0.97]"
+                            >
+                              {t.editDay}
+                            </button>
+                            <button
+                              onClick={() => handleRemoveRecord(r.work_date)}
+                              className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-600 text-xs font-bold active:scale-[0.97]"
+                            >
+                              {t.removeDay}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ===============================================================
+                TAB 3: WALLET TAB (ZERO DOUBLE-COUNTING)
+               =============================================================== */}
+            {!activeOverlayScreen && activeTab === 'wallet' && (
+              <div className="space-y-4 animate-fade-up">
+                <h1 className="text-lg font-extrabold text-[#0B1D3A]">{t.walletTitle}</h1>
+
+                {/* Gradient Wallet Summary */}
+                <div className="hero-gradient rounded-[24px] p-5 text-white shadow-hero">
+                  <div className="text-xs text-slate-300 font-semibold">{t.grossTotal}</div>
+                  <div className="text-3xl font-extrabold text-[#6EE7D2] mt-1">
+                    <LtrNum>{fmtMoney(walletStats.totalGross, t.currency)}</LtrNum>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-white/15 text-xs">
+                    <div>
+                      <div className="text-slate-300">{t.paidTotal}</div>
+                      <LtrNum className="text-sm font-extrabold text-[#00C29A] mt-0.5">
+                        {fmtMoney(walletStats.totalPaid, t.currency)}
+                      </LtrNum>
+                    </div>
+                    <div>
+                      <div className="text-slate-300">{t.remainingTotal}</div>
+                      <LtrNum className="text-sm font-extrabold text-amber-300 mt-0.5">
+                        {fmtMoney(walletStats.totalRemaining, t.currency)}
+                      </LtrNum>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mutually Exclusive Category Breakdown */}
+                <div className="fintech-card p-5 space-y-3">
+                  <h2 className="text-sm font-extrabold text-[#0B1D3A] mb-1">{t.categoryBreakdown}</h2>
+
+                  {[
+                    { icon: 'fi-sr-star', color: 'text-amber-500 bg-amber-50', label: t.catHoliday, days: walletStats.holidayDays, amount: walletStats.holidaySum },
+                    { icon: 'fi-sr-sun', color: 'text-indigo-600 bg-indigo-50', label: t.catSunday, days: walletStats.sundayDays, amount: walletStats.sundaySum },
+                    { icon: 'fi-sr-bolt', color: 'text-sky-600 bg-sky-50', label: t.catLong, days: walletStats.longDays, amount: walletStats.longSum },
+                    { icon: 'fi-sr-briefcase', color: 'text-emerald-600 bg-emerald-50', label: t.catNormal, days: walletStats.normalDays, amount: walletStats.normalSum },
+                    { icon: 'fi-sr-gift', color: 'text-purple-600 bg-purple-50', label: t.catBonuses, days: null, amount: walletStats.bonusesExpected },
+                  ].map((row, idx) => (
+                    <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-[#EEF2F7]/75">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${row.color}`}>
+                          <i className={`fi ${row.icon} text-base`}></i>
+                        </div>
+                        <div>
+                          <div className="text-xs font-extrabold text-[#0B1D3A]">{row.label}</div>
+                          {row.days !== null && (
+                            <div className="text-[11px] text-slate-500">
+                              <LtrNum>{row.days} {t.daysUnit}</LtrNum>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <LtrNum className="text-sm font-extrabold text-[#0B1D3A]">
+                        {fmtMoney(row.amount, t.currency)}
+                      </LtrNum>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ===============================================================
+                TAB 4: PAYROLL TAB
+               =============================================================== */}
+            {!activeOverlayScreen && activeTab === 'payroll' && (
+              <div className="space-y-4 animate-fade-up">
+                <div className="flex items-center justify-between gap-2">
+                  <h1 className="text-lg font-extrabold text-[#0B1D3A]">{t.payrollTitle}</h1>
+                  <button
+                    onClick={() => runWithLoader(() => setActiveOverlayScreen('simulator'), 'nav')}
+                    className="px-3.5 py-2 rounded-xl bg-[#0B1D3A] text-white text-xs font-extrabold flex items-center gap-1.5 active:scale-[0.97]"
+                  >
+                    <i className="fi fi-sr-calculator text-[#00C29A]"></i>
+                    <span>{t.openSimulator}</span>
+                  </button>
+                </div>
+
+                {/* Net to Pay Hero */}
+                <div className="hero-gradient rounded-[24px] p-5 text-white shadow-hero">
+                  <div className="text-xs text-slate-300 font-semibold">{t.netToPay}</div>
+                  <div className="text-3xl font-extrabold text-[#6EE7D2] mt-1">
+                    <LtrNum>{fmtMoney(payrollCalc.netToPay, t.currency)}</LtrNum>
+                  </div>
+                  <div className="mt-4 pt-3.5 border-t border-white/15 flex items-center justify-between text-xs">
+                    <span className="text-slate-300">{t.totalGross}</span>
+                    <LtrNum className="font-bold text-white">{fmtMoney(payrollCalc.totalGross, t.currency)}</LtrNum>
+                  </div>
+                </div>
+
+                {/* Live Editable Rates & Deductions */}
+                <div className="fintech-card p-5 space-y-4">
+                  <h2 className="text-sm font-extrabold text-[#0B1D3A]">{t.rateSettings}</h2>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1.5">{t.dailyRate8h}</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        dir="ltr"
+                        value={payroll.daily_rate}
+                        onChange={(e) => {
+                          const d = Number(e.target.value || 0);
+                          updatePayrollField({ daily_rate: d, hourly_rate: Number((d / 8).toFixed(4)) });
+                        }}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#EEF2F7] font-mono-num font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1.5">{t.hourlyRate}</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        dir="ltr"
+                        value={Number(payroll.hourly_rate || 0).toFixed(2)}
+                        onChange={(e) => {
+                          const h = Number(e.target.value || 0);
+                          updatePayrollField({ hourly_rate: h, daily_rate: Number((h * 8).toFixed(2)) });
+                        }}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#EEF2F7] font-mono-num font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1.5">{t.salaryAdvance}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      dir="ltr"
+                      value={payroll.salary_advance}
+                      onChange={(e) => updatePayrollField({ salary_advance: Number(e.target.value || 0) })}
+                      className="w-full px-4 py-2.5 rounded-xl bg-[#EEF2F7] font-mono-num font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                    />
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <label className="flex items-center justify-between p-3 rounded-2xl bg-[#EEF2F7] cursor-pointer">
+                      <span className="text-xs font-bold text-[#0B1D3A]">{t.cnssLabel}</span>
+                      <input
+                        type="checkbox"
+                        checked={payroll.cnss_enabled}
+                        onChange={(e) => { soundEngine.play('tap'); updatePayrollField({ cnss_enabled: e.target.checked }); }}
+                        className="w-5 h-5 accent-[#00C29A]"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between p-3 rounded-2xl bg-[#EEF2F7] cursor-pointer">
+                      <span className="text-xs font-bold text-[#0B1D3A]">{t.amoLabel}</span>
+                      <input
+                        type="checkbox"
+                        checked={payroll.amo_enabled}
+                        onChange={(e) => { soundEngine.play('tap'); updatePayrollField({ amo_enabled: e.target.checked }); }}
+                        className="w-5 h-5 accent-[#00C29A]"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Breakdown */}
+                  <div className="pt-3 border-t border-slate-100 space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">{t.grossWork}</span>
+                      <LtrNum className="font-bold text-[#0B1D3A]">{fmtMoney(walletStats.grossWork, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">{t.bonusesReceived}</span>
+                      <LtrNum className="font-bold text-emerald-700">+{fmtMoney(walletStats.bonusesReceived, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">{t.cnssDeduction}</span>
+                      <LtrNum className="font-bold text-rose-600">-{fmtMoney(payrollCalc.cnssDed, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">{t.amoDeduction}</span>
+                      <LtrNum className="font-bold text-rose-600">-{fmtMoney(payrollCalc.amoDed, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">{t.advanceDeduction}</span>
+                      <LtrNum className="font-bold text-rose-600">-{fmtMoney(payrollCalc.advanceDed, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t border-slate-100 text-sm font-extrabold">
+                      <span className="text-[#0B1D3A]">{t.netToPay}</span>
+                      <LtrNum className="text-[#009E7D]">{fmtMoney(payrollCalc.netToPay, t.currency)}</LtrNum>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => { soundEngine.play('tap'); setShowPayslip(true); }}
+                    className="w-full py-3.5 rounded-2xl bg-[#0B1D3A] text-white font-extrabold text-sm flex items-center justify-center gap-2 active:scale-[0.97] transition"
+                  >
+                    <i className="fi fi-sr-print text-[#00C29A]"></i>
+                    <span>{t.printPayslip}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ===============================================================
+                TAB 5: BONUSES (PRIMES) TAB
+               =============================================================== */}
+            {!activeOverlayScreen && activeTab === 'bonuses' && (
+              <div className="space-y-4 animate-fade-up">
+                <h1 className="text-lg font-extrabold text-[#0B1D3A]">{t.bonusesTitle}</h1>
+
+                {/* Summary Strip */}
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div className="fintech-card p-3.5 text-center">
+                    <div className="text-[11px] font-bold text-slate-500">{t.expectedLabel}</div>
+                    <LtrNum className="text-sm font-extrabold text-[#0B1D3A] mt-1">
+                      {fmtMoney(walletStats.bonusesExpected, t.currency)}
+                    </LtrNum>
+                  </div>
+                  <div className="fintech-card p-3.5 text-center">
+                    <div className="text-[11px] font-bold text-slate-500">{t.receivedLabel}</div>
+                    <LtrNum className="text-sm font-extrabold text-[#009E7D] mt-1">
+                      {fmtMoney(walletStats.bonusesReceived, t.currency)}
+                    </LtrNum>
+                  </div>
+                  <div className="fintech-card p-3.5 text-center">
+                    <div className="text-[11px] font-bold text-slate-500">{t.missingLabel}</div>
+                    <LtrNum className="text-sm font-extrabold text-rose-600 mt-1">
+                      {fmtMoney(walletStats.bonusesMissing, t.currency)}
+                    </LtrNum>
+                  </div>
+                </div>
+
+                {/* Add Bonus Form */}
+                <form onSubmit={handleAddBonus} className="fintech-card p-5 space-y-3.5">
+                  <h2 className="text-sm font-extrabold text-[#0B1D3A]">{t.addBonusTitle}</h2>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1.5">{t.bonusCategory}</label>
+                    <select
+                      value={bonusCat}
+                      onChange={(e) => setBonusCat(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#EEF2F7] text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                    >
+                      {Object.keys(t.bonusCategories).map((k) => (
+                        <option key={k} value={k}>{t.bonusCategories[k]}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {bonusCat === 'custom' && (
+                    <input
+                      type="text"
+                      required
+                      value={bonusCustomName}
+                      onChange={(e) => setBonusCustomName(e.target.value)}
+                      placeholder={t.bonusNamePh}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#EEF2F7] text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                    />
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1">{t.expectedLabel}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        required
+                        dir="ltr"
+                        value={bonusExpected}
+                        onChange={(e) => setBonusExpected(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#EEF2F7] font-mono-num font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1">{t.receivedLabel}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        dir="ltr"
+                        value={bonusReceived}
+                        onChange={(e) => setBonusReceived(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#EEF2F7] font-mono-num font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 rounded-2xl bg-[#00C29A] text-[#0B1D3A] font-extrabold text-xs active:scale-[0.97] transition"
+                  >
+                    {t.addBonusBtn}
+                  </button>
+                </form>
+
+                {/* Bonus List */}
+                {cycleBonuses.length === 0 ? (
+                  <div className="fintech-card p-8 text-center text-xs font-bold text-slate-400">
+                    {t.noBonuses}
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {cycleBonuses.map((b) => {
+                      const missing = Math.max(0, Number(b.expected_amount) - Number(b.received_amount));
+                      return (
+                        <div key={b.id} className="fintech-card p-4 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-extrabold text-[#0B1D3A]">{b.label}</span>
+                            <LtrNum className="text-xs font-extrabold text-[#009E7D]">
+                              {fmtMoney(b.received_amount, t.currency)} / {fmtMoney(b.expected_amount, t.currency)}
+                            </LtrNum>
+                          </div>
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                            {missing > 0 ? (
+                              <button
+                                onClick={() => handleMarkBonusReceived(b.id)}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-extrabold active:scale-[0.97]"
+                              >
+                                {t.markReceived}
+                              </button>
+                            ) : (
+                              <span className="text-xs font-extrabold text-emerald-600 flex items-center gap-1">
+                                <i className="fi fi-sr-check-circle"></i> {t.receivedLabel}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => handleDeleteBonus(b.id)}
+                              className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-600 text-xs font-bold active:scale-[0.97]"
+                            >
+                              {t.removeDay}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </main>
+
+          {/* =================================================================
+              FLOATING GLASSMORPHIC BOTTOM NAVIGATION (Fixed dir="ltr")
+             ================================================================= */}
+          <nav
+            dir="ltr"
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-2rem)] max-w-md glass-nav rounded-[24px] px-2 py-2 flex items-center justify-around"
+          >
+            {[
+              { id: 'record', icon: 'fi-sr-calendar-check', label: t.nav.record },
+              { id: 'history', icon: 'fi-sr-time-past', label: t.nav.history },
+              { id: 'wallet', icon: 'fi-sr-wallet', label: t.nav.wallet },
+              { id: 'payroll', icon: 'fi-sr-money-check-edit', label: t.nav.payroll },
+              { id: 'bonuses', icon: 'fi-sr-gift', label: t.nav.bonuses },
+            ].map((item) => {
+              const isActive = !activeOverlayScreen && activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    if (isActive) return;
+                    runWithLoader(() => {
+                      setActiveOverlayScreen(null);
+                      setActiveTab(item.id);
+                    }, 'nav');
+                  }}
+                  className={`flex flex-col items-center justify-center px-2.5 py-1.5 rounded-2xl transition active:scale-[0.95] ${
+                    isActive ? 'bg-[#0B1D3A] text-white shadow-sm' : 'text-slate-500 hover:text-[#0B1D3A]'
+                  }`}
+                >
+                  <i className={`fi ${item.icon} text-base leading-none ${isActive ? 'text-[#00C29A]' : ''}`}></i>
+                  <span className="text-[10px] font-bold mt-1 leading-none">{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* =================================================================
+              RIGHT-SIDE SLIDE-OVER DRAWER (Fixed dir="ltr" backdrop, dir={t.dir} panel)
+             ================================================================= */}
+          {drawerOpen && (
+            <div
+              dir="ltr"
+              className="fixed inset-0 z-40 bg-[#0B1D3A]/45 backdrop-blur-xs flex justify-end"
+              onClick={() => setDrawerOpen(false)}
+            >
+              <aside
+                dir={t.dir}
+                onClick={(e) => e.stopPropagation()}
+                className="w-[84%] max-w-[330px] h-full bg-white shadow-2xl p-5 flex flex-col justify-between overflow-y-auto animate-fade-up"
+              >
+                <div className="space-y-4">
+                  {/* Drawer Header */}
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <CheckDayLogo size={30} />
+                    <button
+                      onClick={() => { soundEngine.play('tap'); setDrawerOpen(false); }}
+                      className="w-9 h-9 rounded-xl bg-[#EEF2F7] text-[#0B1D3A] flex items-center justify-center active:scale-[0.95]"
+                    >
+                      <i className="fi fi-sr-cross-small text-lg"></i>
+                    </button>
+                  </div>
+
+                  {/* Profile Pill (Locked Shift Display) */}
+                  <div className="p-3.5 rounded-2xl bg-[#EEF2F7] space-y-1">
+                    <div className="text-sm font-extrabold text-[#0B1D3A]">{profile.full_name}</div>
+                    <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
+                      <LtrNum>#{profile.matricule}</LtrNum>
+                      <span>·</span>
+                      <span className="text-[#009E7D]">{t.shifts[profile.shift_category]}</span>
+                    </div>
+                  </div>
+
+                  {/* Menu Items */}
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => {
+                        setDrawerOpen(false);
+                        runWithLoader(() => setActiveOverlayScreen('simulator'), 'nav');
+                      }}
+                      className="w-full p-3 rounded-2xl bg-[#EEF2F7]/70 hover:bg-[#EEF2F7] flex items-center gap-3 text-xs font-extrabold text-[#0B1D3A] active:scale-[0.98]"
+                    >
+                      <i className="fi fi-sr-calculator text-[#00C29A] text-base"></i>
+                      <span>{t.menuSimulator}</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setDrawerOpen(false);
+                        runWithLoader(() => setActiveOverlayScreen('faq'), 'nav');
+                      }}
+                      className="w-full p-3 rounded-2xl bg-[#EEF2F7]/70 hover:bg-[#EEF2F7] flex items-center gap-3 text-xs font-extrabold text-[#0B1D3A] active:scale-[0.98]"
+                    >
+                      <i className="fi fi-sr-interrogation text-[#00C29A] text-base"></i>
+                      <span>{t.menuFaq}</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setDrawerOpen(false);
+                        runWithLoader(() => setActiveOverlayScreen('about'), 'nav');
+                      }}
+                      className="w-full p-3 rounded-2xl bg-[#EEF2F7]/70 hover:bg-[#EEF2F7] flex items-center gap-3 text-xs font-extrabold text-[#0B1D3A] active:scale-[0.98]"
+                    >
+                      <i className="fi fi-sr-info text-[#00C29A] text-base"></i>
+                      <span>{t.menuAbout}</span>
+                    </button>
+
+                    <button
+                      onClick={handleExportExcel}
+                      className="w-full p-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 flex items-center gap-3 text-xs font-extrabold text-emerald-900 active:scale-[0.98]"
+                    >
+                      <i className="fi fi-sr-file-excel text-[#009E7D] text-base"></i>
+                      <span>{t.menuExportExcel}</span>
+                    </button>
+
+                    <button
+                      onClick={() => { soundEngine.play('tap'); setShowPinModal(true); }}
+                      className="w-full p-3 rounded-2xl bg-[#EEF2F7]/70 hover:bg-[#EEF2F7] flex items-center justify-between text-xs font-extrabold text-[#0B1D3A] active:scale-[0.98]"
+                    >
+                      <span className="flex items-center gap-3">
+                        <i className="fi fi-sr-lock text-[#00C29A] text-base"></i>
+                        <span>{t.menuPinLock}</span>
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] ${pinHash ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                        {pinHash ? t.pinEnabled : t.pinDisabled}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Language Switcher */}
+                  <div className="pt-2 border-t border-slate-100">
+                    <div className="text-[11px] font-bold text-slate-400 mb-2">{t.languageLabel}</div>
+                    <div className="grid grid-cols-3 gap-1.5" dir="ltr">
+                      {(['ar', 'fr', 'en']).map((code) => (
+                        <button
+                          key={code}
+                          onClick={() => {
+                            setDrawerOpen(false);
+                            runWithLoader(() => setLang(code), 'nav');
+                          }}
+                          className={`py-2 rounded-xl text-xs font-extrabold transition ${
+                            lang === code ? 'bg-[#0B1D3A] text-white' : 'bg-[#EEF2F7] text-slate-600'
+                          }`}
+                        >
+                          {code === 'ar' ? 'العربية' : code === 'fr' ? 'FR' : 'EN'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Sound Engine Toggle + 4-Button Sound Tester */}
+                  <div className="pt-2 border-t border-slate-100 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold text-[#0B1D3A]">{t.menuSound}</span>
+                      <button
+                        onClick={() => {
+                          const next = !soundMuted;
+                          setSoundMuted(next);
+                          soundEngine.setMuted(next);
+                          if (!next) soundEngine.play('tap');
+                        }}
+                        className={`w-12 h-6 rounded-full transition relative ${
+                          !soundMuted ? 'bg-[#00C29A]' : 'bg-slate-300'
+                        }`}
+                      >
+                        <span
+                          className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-all ${
+                            !soundMuted ? 'left-7' : 'left-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    <div className="text-[11px] font-bold text-slate-400">{t.soundTester}</div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {(['tap', 'success', 'coin', 'absent']).map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => soundEngine.play(s)}
+                          className="py-2 px-1 rounded-xl bg-[#EEF2F7] hover:bg-slate-200 text-[10px] font-extrabold text-[#0B1D3A] active:scale-[0.95]"
+                        >
+                          {t.soundBtns[s]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Logout */}
+                <button
+                  onClick={handleLogout}
+                  className="mt-6 w-full py-3 rounded-2xl bg-rose-50 text-rose-700 font-extrabold text-xs flex items-center justify-center gap-2 active:scale-[0.97]"
+                >
+                  <i className="fi fi-sr-sign-out-alt"></i>
+                  <span>{t.logoutBtn}</span>
+                </button>
+              </aside>
+            </div>
+          )}
+
+          {/* =================================================================
+              LOCAL PIN MODAL
+             ================================================================= */}
+          {showPinModal && (
+            <div className="fixed inset-0 z-50 bg-[#0B1D3A]/50 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="fintech-card max-w-xs w-full p-5 space-y-4 animate-fade-up">
+                <h3 className="text-base font-extrabold text-[#0B1D3A] text-center">{t.pinModalTitle}</h3>
+                <p className="text-xs text-slate-500 text-center">{t.pinEnter4}</p>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  dir="ltr"
+                  value={newPinInput}
+                  onChange={(e) => setNewPinInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  placeholder="••••"
+                  className="w-full py-3 rounded-2xl bg-[#EEF2F7] text-center font-mono-num text-2xl tracking-[0.5em] font-bold focus:outline-none focus:ring-2 focus:ring-[#00C29A]"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveNewPin}
+                    className="flex-1 py-2.5 rounded-xl bg-[#00C29A] text-[#0B1D3A] text-xs font-extrabold active:scale-[0.97]"
+                  >
+                    {t.pinSave}
+                  </button>
+                  {pinHash && (
+                    <button
+                      onClick={handleDisablePin}
+                      className="px-3 py-2.5 rounded-xl bg-rose-50 text-rose-600 text-xs font-extrabold active:scale-[0.97]"
+                    >
+                      {t.pinRemove}
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={() => setShowPinModal(false)}
+                  className="w-full py-2 text-xs font-bold text-slate-500"
+                >
+                  {t.closeBtn}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =================================================================
+              PRINTABLE PAYSLIP MODAL
+             ================================================================= */}
+          {showPayslip && (
+            <div className="fixed inset-0 z-50 bg-[#0B1D3A]/55 backdrop-blur-xs flex items-center justify-center p-4">
+              <div id="printable-payslip" className="fintech-card max-w-md w-full p-6 space-y-4 animate-fade-up">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                  <CheckDayLogo size={30} />
+                  <LtrNum className="text-xs font-bold text-slate-500">
+                    {cycle.startIso} → {cycle.endIso}
+                  </LtrNum>
+                </div>
+
+                <div className="text-center">
+                  <h3 className="text-base font-extrabold text-[#0B1D3A]">{t.payslipTitle}</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {profile.full_name} · <LtrNum>#{profile.matricule}</LtrNum> · {t.shifts[profile.shift_category]}
+                  </p>
+                </div>
+
+                <div className="space-y-2 text-xs border-y border-slate-100 py-3">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">{t.grossWork}</span>
+                    <LtrNum className="font-bold">{fmtMoney(walletStats.grossWork, t.currency)}</LtrNum>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">{t.bonusesReceived}</span>
+                    <LtrNum className="font-bold text-emerald-700">+{fmtMoney(walletStats.bonusesReceived, t.currency)}</LtrNum>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">{t.cnssDeduction}</span>
+                    <LtrNum className="font-bold text-rose-600">-{fmtMoney(payrollCalc.cnssDed, t.currency)}</LtrNum>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">{t.amoDeduction}</span>
+                    <LtrNum className="font-bold text-rose-600">-{fmtMoney(payrollCalc.amoDed, t.currency)}</LtrNum>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">{t.advanceDeduction}</span>
+                    <LtrNum className="font-bold text-rose-600">-{fmtMoney(payrollCalc.advanceDed, t.currency)}</LtrNum>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-slate-100 text-sm font-extrabold">
+                    <span className="text-[#0B1D3A]">{t.netToPay}</span>
+                    <LtrNum className="text-[#009E7D]">{fmtMoney(payrollCalc.netToPay, t.currency)}</LtrNum>
+                  </div>
+                </div>
+
+                <div className="flex gap-2.5 no-print">
+                  <button
+                    onClick={() => window.print()}
+                    className="flex-1 py-3 rounded-2xl bg-[#0B1D3A] text-white text-xs font-extrabold active:scale-[0.97]"
+                  >
+                    {t.printNow}
+                  </button>
+                  <button
+                    onClick={() => setShowPayslip(false)}
+                    className="px-4 py-3 rounded-2xl bg-[#EEF2F7] text-[#0B1D3A] text-xs font-bold active:scale-[0.97]"
+                  >
+                    {t.closeBtn}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* =================================================================
+              1-SECOND CENTERED TRANSLUCENT ACTION LOADER
+             ================================================================= */}
+          {loadingOverlay && (
+            <div className="fixed inset-0 z-50 bg-[#0B1D3A]/35 backdrop-blur-sm flex items-center justify-center">
+              <div className="bg-white/95 rounded-3xl px-7 py-6 shadow-2xl flex flex-col items-center gap-3">
+                <div className="loader-ring"><CheckDayLogo size={46} showWordmark={false} /></div>
+                <span className="text-xs font-bold text-[#0B1D3A]">{t.loading}</span>
+              </div>
+            </div>
+          )}
+
+          {/* TOAST NOTIFICATION */}
+          {toast && (
+            <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl shadow-lg text-xs font-extrabold text-white bg-[#0B1D3A] border border-white/10 animate-fade-up">
+              {toast.msg}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function FaqScreen({ t, onClose }) {
+      const [openIdx, setOpenIdx] = useState(0);
+      return (
+        <div className="space-y-4 animate-fade-up">
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg font-extrabold text-[#0B1D3A]">{t.faqTitle}</h1>
+            <button
+              onClick={onClose}
+              className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-[#0B1D3A] active:scale-[0.97]"
+            >
+              {t.backBtn}
+            </button>
+          </div>
+          <div className="space-y-2.5">
+            {t.faqs.map((item, idx) => {
+              const isOpen = openIdx === idx;
+              return (
+                <div key={idx} className="fintech-card overflow-hidden">
+                  <button
+                    onClick={() => { soundEngine.play('tap'); setOpenIdx(isOpen ? -1 : idx); }}
+                    className="w-full p-4 flex items-center justify-between gap-3 text-start"
+                  >
+                    <span className="text-xs font-extrabold text-[#0B1D3A] leading-relaxed">{item.q}</span>
+                    <i className={`fi fi-sr-angle-small-down text-base text-[#00C29A] transition-transform ${isOpen ? 'rotate-180' : ''}`}></i>
+                  </button>
+                  {isOpen && (
+                    <div className="px-4 pb-4 text-xs text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
+                      {item.a}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

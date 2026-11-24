@@ -1,0 +1,17 @@
+{
+  "name": "checkday-app",
+  "version": "2.0.0",
+  "description": "CheckDay \u2014 Attendance, Shift & Payroll Tracker for Moroccan Workers",
+  "private": true,
+  "scripts": {
+    "sync": "npx cap sync android",
+    "open:android": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.1.2"
+  }
+}

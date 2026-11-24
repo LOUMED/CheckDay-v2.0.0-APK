@@ -1,0 +1,18 @@
+<svg width="512" height="512" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cdSquircle" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0B1D3A" />
+      <stop offset="65%" stop-color="#163466" />
+      <stop offset="100%" stop-color="#0D525E" />
+    </linearGradient>
+    <linearGradient id="cdEmerald" x1="14" y1="46" x2="52" y2="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00A884" />
+      <stop offset="60%" stop-color="#00C29A" />
+      <stop offset="100%" stop-color="#6EE7D2" />
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="64" height="64" rx="18" fill="url(#cdSquircle)" />
+  <path d="M14 42C19 42 21 35 25 35C29 35 30 43 35 43C40 43 44 26 51 20" stroke="rgba(110,231,210,0.22)" stroke-width="3" stroke-linecap="round" />
+  <path d="M17.5 33.5L27 43L47.5 21.5" stroke="url(#cdEmerald)" stroke-width="6.2" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="48.5" cy="20.5" r="3.2" fill="#6EE7D2" />
+</svg>
