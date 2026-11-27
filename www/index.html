@@ -239,27 +239,33 @@
         const remaining = [];
         for (const item of q) {
           try {
+            let res = null;
             if (item.type === 'upsert_profile') {
-              await supabaseClient.from('profiles').upsert(item.payload, { onConflict: 'id' });
+              res = await supabaseClient.from('profiles').upsert(item.payload, { onConflict: 'id' });
+              if (res?.error && String(res.error.message || '').includes('column')) {
+                const { anchor_shift, anchor_week_start, ...corePayload } = item.payload;
+                res = await supabaseClient.from('profiles').upsert(corePayload, { onConflict: 'id' });
+              }
             } else if (item.type === 'upsert_attendance') {
-              await supabaseClient
+              res = await supabaseClient
                 .from('attendance_records')
                 .upsert(item.payload, { onConflict: 'user_id,work_date' });
             } else if (item.type === 'delete_attendance') {
-              await supabaseClient
+              res = await supabaseClient
                 .from('attendance_records')
                 .delete()
                 .eq('user_id', item.payload.user_id)
                 .eq('work_date', item.payload.work_date);
             } else if (item.type === 'upsert_bonus') {
-              await supabaseClient.from('bonuses').upsert(item.payload, { onConflict: 'id' });
+              res = await supabaseClient.from('bonuses').upsert(item.payload, { onConflict: 'id' });
             } else if (item.type === 'delete_bonus') {
-              await supabaseClient.from('bonuses').delete().eq('id', item.payload.id);
+              res = await supabaseClient.from('bonuses').delete().eq('id', item.payload.id);
             } else if (item.type === 'upsert_payroll') {
-              await supabaseClient
+              res = await supabaseClient
                 .from('payroll_settings')
                 .upsert(item.payload, { onConflict: 'user_id' });
             }
+            if (res?.error) throw res.error;
           } catch {
             remaining.push(item);
           }
@@ -1936,16 +1942,29 @@
           cnss_enabled: true,
           amo_enabled: true,
         };
-        runWithLoader(() => {
-          setProfile(newProfile);
+        runWithLoader(async () => {
+          let finalProfile = { ...newProfile };
+          if (supabaseClient) {
+            try {
+              const { data: sess } = await supabaseClient.auth.getSession();
+              if (sess?.session?.user?.id) {
+                finalProfile.id = sess.session.user.id;
+              }
+              let { error } = await supabaseClient.from('profiles').upsert(finalProfile, { onConflict: 'id' });
+              if (error && String(error.message || '').includes('column')) {
+                const { anchor_shift, anchor_week_start, ...coreProfile } = finalProfile;
+                await supabaseClient.from('profiles').upsert(coreProfile, { onConflict: 'id' });
+              }
+              await supabaseClient.from('payroll_settings').upsert({ user_id: finalProfile.id, ...newPayroll }, { onConflict: 'user_id' });
+            } catch {
+              SilentSync.enqueue({ type: 'upsert_profile', payload: finalProfile });
+              SilentSync.enqueue({ type: 'upsert_payroll', payload: { user_id: finalProfile.id, ...newPayroll } });
+            }
+          }
+          setProfile(finalProfile);
           setPayroll(newPayroll);
-          Storage.set(KEYS.PROFILE, newProfile);
+          Storage.set(KEYS.PROFILE, finalProfile);
           Storage.set(KEYS.PAYROLL, newPayroll);
-          SilentSync.enqueue({ type: 'upsert_profile', payload: newProfile });
-          SilentSync.enqueue({
-            type: 'upsert_payroll',
-            payload: { user_id: newProfile.id, ...newPayroll },
-          });
           showToast(t.savedToast);
         }, 'success');
       };
