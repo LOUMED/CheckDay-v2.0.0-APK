@@ -159,7 +159,8 @@
        ========================================================================= */
     const SUPABASE_URL = 'https://lpnxqiurubwcqmmbonvs.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_XrbwvPo5The2UW4g89MmkQ_2VQSKUmJ';
-    const APP_VERSION = '2.0.0';
+    const APP_VERSION = '3.0.0';
+    const CHECKCHAT_API_URL = 'https://checkday-api.vercel.app/api/checkchat';
 
     const isCloudConfigured = () =>
       SUPABASE_URL.startsWith('https://') &&
@@ -485,13 +486,76 @@
       maintenance_message_fr: 'Application en maintenance temporaire, veuillez réessayer plus tard.',
       maintenance_message_en: 'App is under temporary maintenance, please try again later.',
       force_update: false,
-      min_version: '2.0.0',
+      min_version: '2.1.0',
       update_url: '',
       default_anapec_rate: 131.64,
       default_cdd_cdi_rate: 143.36,
+      default_autre_rate: 141.64,
+      default_sunday_rate: 430.00,
       sunday_multiplier: 1.5,
       holiday_multiplier: 2.0,
+      free_launch_mode: true,
+      pro_monthly_price_mad: 19,
+      pro_features: {
+        simulator: true,
+        payslip_pdf: true,
+        whatsapp_export: true,
+        excel_export: true,
+        pro_widgets: true,
+        checkchat_pro: true,
+      },
     };
+
+    function getMondayOfIso(iso) {
+      const d = parseIsoDate(iso);
+      const dow = d.getUTCDay(); // 0=Sun, 1=Mon
+      const diff = dow === 0 ? -6 : 1 - dow;
+      d.setUTCDate(d.getUTCDate() + diff);
+      return toIsoDate(d);
+    }
+
+    // Automatic weekly rotation: Morning (06:00) -> Night (22:00) -> Afternoon (14:00) -> Morning
+    function getAutoRotatingShift(profile, dateIso) {
+      if (!profile || profile.shift_category === 'normal') return 'normal';
+      const order = ['morning', 'night', 'afternoon'];
+      const anchorShift = order.includes(profile.anchor_shift) ? profile.anchor_shift : 'morning';
+      const anchorMon = profile.anchor_week_start || getMondayOfIso(dateIso);
+      const targetMon = getMondayOfIso(dateIso);
+      const msDiff = parseIsoDate(targetMon).getTime() - parseIsoDate(anchorMon).getTime();
+      const weeksDiff = Math.round(msDiff / (7 * 24 * 60 * 60 * 1000));
+      const baseIdx = order.indexOf(anchorShift);
+      const rotatedIdx = ((baseIdx + weeksDiff) % 3 + 3) % 3;
+      return order[rotatedIdx];
+    }
+
+    // 40-minute pre-shift auto-detection window
+    function getPreShiftInfo(nowMa, shiftType) {
+      const [hh, mm] = nowMa.time.split(':').map(Number);
+      const nowMins = hh * 60 + mm;
+      const starts = {
+        normal: { mins: 8 * 60 + 30, label: '08:30' },
+        morning: { mins: 6 * 60, label: '06:00' },
+        afternoon: { mins: 14 * 60, label: '14:00' },
+        night: { mins: 22 * 60, label: '22:00' },
+      };
+      const target = starts[shiftType] || starts.normal;
+      const diff = target.mins - nowMins;
+      return {
+        isPreShiftWindow: diff > 0 && diff <= 40,
+        minutesLeft: diff,
+        startLabel: target.label,
+      };
+    }
+
+    function compareVersions(a, b) {
+      const pa = String(a || '0').split('.').map(Number);
+      const pb = String(b || '0').split('.').map(Number);
+      for (let i = 0; i < 3; i++) {
+        if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+        if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+      }
+      return 0;
+    }
 
     /* =========================================================================
        5. STRICT 100% PURE MULTI-LANGUAGE DICTIONARY (AR / FR / EN)
@@ -539,6 +603,24 @@
         hourlyRate: 'أجر الساعة',
         shiftCategory: 'فئة الشفت',
         shiftLockedNote: 'يُثبّت الشفت عند إنشاء الحساب ولا يمكن تغييره لاحقاً',
+        currentWeekShift: 'المناوبة التي تعمل بها هذا الأسبوع',
+        currentWeekShiftNote: 'يتبدّل الشفت تلقائياً كل أسبوع بعد يوم الأحد (صباحي ← ليلي ← مسائي)',
+        pendingTitle: 'في انتظار موافقة الإدارة',
+        pendingBody: 'تم تسجيل حسابك بنجاح. سيُفتح التطبيق تلقائياً فور موافقة المسؤول.',
+        refreshStatusBtn: 'تحديث الحالة الآن',
+        preShiftReady: 'موعد البوانطاج قريب',
+        startsAt: 'يبدأ على',
+        pastDayBanner: 'تسجيل يوم سابق — يمكنك تحديد 8 ساعات أو 12 ساعة أو يوم أحد',
+        menuHolidays: 'تقويم الأعياد والعطل الرسمية',
+        menuCheckUpdate: 'التحقق من التحديثات',
+        holidaysTitle: 'الأعياد والعطل الرسمية المغربية',
+        holidayUpcoming: 'قادمة',
+        holidayPassed: 'منقضية',
+        upToDateToast: 'تطبيقك محدّث لآخر إصدار',
+        updateAvailableTitle: 'يتوفر تحديث جديد!',
+        updateAvailableBody: 'الإصدار الجديد متاح الآن مع آخر التحسينات.',
+        downloadPayslip: 'تحميل ورقة الأجر',
+        payslipSubtitle: 'ملخص مستحقات الدورة الشهرية',
         shifts: {
           normal: 'الشفت نورمال',
           A: 'الشفت A',
@@ -546,6 +628,7 @@
           C: 'الشفت C',
         },
         completeSetup: 'حفظ والبدء الآن',
+        alreadyHaveAccount: 'لدي حساب بالفعل؟ تسجيل الدخول',
         // Bottom Nav
         nav: {
           record: 'التسجيل',
@@ -553,7 +636,25 @@
           wallet: 'المحفظة',
           payroll: 'الأجر',
           bonuses: 'المنح',
+          chat: 'تشيك شات',
         },
+        proBadge: 'برو',
+        proFreeNow: 'مجاناً لفترة محدودة',
+        proMonthlyUnit: 'درهم/شهر',
+        proModalTitle: 'اشترك في CheckDay Pro',
+        proModalBody: 'افتح محاكي الأجر، ورقة الأجر الاحترافية، التصدير عبر واتساب وإكسل، الويجيتات المتقدمة، وحصّة أكبر في تشيك شات.',
+        proUnlockHint: 'تواصل مع الإدارة لتفعيل اشتراكك أو اشترك عند الإطلاق الرسمي على Play Store.',
+        shareWhatsapp: 'مشاركة عبر واتساب',
+        normalExceptionToggle: 'استثناء اليوم (شفت مختلف)',
+        normalExceptionNote: 'إذا اشتغلت اليوم صباحي أو مسائي أو ليلي بدل النورمال',
+        chatTitle: 'تشيك شات',
+        chatSubtitle: 'مساعدك الذكي لحساب الأجر وقوانين العمل المغربية',
+        chatPlaceholder: 'اسأل عن أجرك، الضمان الاجتماعي، العطل، أو الساعات الإضافية...',
+        chatSend: 'إرسال',
+        chatWelcome: 'مرحباً بك في تشيك شات! اسألني أي سؤال حول أجرك، الدورة من 18 إلى 17، الضمان الاجتماعي أو العطل الرسمية.',
+        chatRemaining: 'الرسائل المتبقية اليوم',
+        chatThinking: 'جاري التفكير...',
+        chatError: 'تعذر الاتصال بالمساعد الذكي حالياً، حاول بعد لحظة.',
         // Record Tab
         cycleLabel: 'الدورة الشهرية',
         moroccoTime: 'توقيت المغرب',
@@ -564,7 +665,7 @@
         holidayBanner: 'عطلة رسمية مغربية — يُحتسب الأجر مضاعفاً',
         fridayFlexBanner: 'يوم الجمعة — يمكنك تعديل وقت الخروج بحرية',
         saturdayFlexBanner: 'يوم السبت — يمكنك تعديل وقت الخروج بحرية',
-        sundayBanner: 'يوم الأحد — تعويض خاص ليوم الراحة',
+        sundayBanner: 'يوم الأحد — تعويض ثابت 430 درهم',
         shift12hBanner: 'مناوبة 12 ساعة — تشمل الساعات الإضافية',
         chooseShift: 'اختر نظام اليوم',
         shiftNormal8h: 'يوم عادي (8 ساعات)',
@@ -793,6 +894,24 @@
         hourlyRate: 'Taux horaire',
         shiftCategory: 'Catégorie de shift',
         shiftLockedNote: "Le shift est verrouillé à l'inscription et ne peut pas être modifié ensuite",
+        currentWeekShift: 'Votre shift actuel cette semaine',
+        currentWeekShiftNote: 'Rotation automatique chaque semaine après le dimanche (Matin → Nuit → Après-midi)',
+        pendingTitle: "En attente d'approbation",
+        pendingBody: "Votre compte est enregistré. L'application s'ouvrira automatiquement dès validation par l'administrateur.",
+        refreshStatusBtn: 'Actualiser le statut',
+        preShiftReady: 'Pointage imminent',
+        startsAt: 'Début à',
+        pastDayBanner: 'Rattrapage jour passé — choisissez 8h, 12h ou Dimanche librement',
+        menuHolidays: 'Calendrier des jours fériés',
+        menuCheckUpdate: 'Vérifier les mises à jour',
+        holidaysTitle: 'Jours fériés officiels au Maroc',
+        holidayUpcoming: 'À venir',
+        holidayPassed: 'Passé',
+        upToDateToast: 'Vous utilisez la dernière version',
+        updateAvailableTitle: 'Mise à jour disponible !',
+        updateAvailableBody: 'Une nouvelle version est prête à être téléchargée.',
+        downloadPayslip: 'Télécharger le bulletin',
+        payslipSubtitle: 'Récapitulatif détaillé du cycle mensuel',
         shifts: {
           normal: 'Shift Normal',
           A: 'Shift A',
@@ -800,13 +919,32 @@
           C: 'Shift C',
         },
         completeSetup: 'Enregistrer et démarrer',
+        alreadyHaveAccount: 'Déjà un compte ? Se connecter',
         nav: {
           record: 'Pointage',
           history: 'Historique',
           wallet: 'Portefeuille',
           payroll: 'Paie',
           bonuses: 'Primes',
+          chat: 'CheckChat',
         },
+        proBadge: 'PRO',
+        proFreeNow: 'Gratuit (offre lancement)',
+        proMonthlyUnit: 'DH/mois',
+        proModalTitle: 'Passer à CheckDay Pro',
+        proModalBody: 'Débloquez le simulateur de salaire, le bulletin de paie exportable, le partage WhatsApp & Excel, les widgets Pro et CheckChat étendu.',
+        proUnlockHint: 'Contactez votre administrateur ou abonnez-vous via Google Play.',
+        shareWhatsapp: 'Partager sur WhatsApp',
+        normalExceptionToggle: 'Exception du jour (autre shift)',
+        normalExceptionNote: 'Si vous avez travaillé matin, après-midi ou nuit au lieu du normal',
+        chatTitle: 'CheckChat',
+        chatSubtitle: 'Votre assistant IA paie & droit du travail au Maroc',
+        chatPlaceholder: 'Posez une question sur votre paie, CNSS, AMO ou jours fériés...',
+        chatSend: 'Envoyer',
+        chatWelcome: 'Bonjour ! Bienvenue sur CheckChat. Posez-moi vos questions sur le cycle 18-17, la CNSS/AMO, les dimanches ou les jours fériés.',
+        chatRemaining: 'Messages restants aujourd’hui',
+        chatThinking: 'Réflexion...',
+        chatError: 'Impossible de joindre CheckChat pour le moment.',
         cycleLabel: 'Cycle mensuel',
         moroccoTime: 'Heure du Maroc',
         dayEstimate: 'Estimation du jour',
@@ -816,7 +954,7 @@
         holidayBanner: 'Jour férié marocain — rémunération doublée',
         fridayFlexBanner: 'Vendredi — ajustez librement votre heure de sortie',
         saturdayFlexBanner: 'Samedi — ajustez librement votre heure de sortie',
-        sundayBanner: 'Dimanche — majoration spéciale jour de repos',
+        sundayBanner: 'Dimanche — forfait fixe 430 DH',
         shift12hBanner: 'Shift 12h — heures supplémentaires incluses',
         chooseShift: 'Choisir le shift du jour',
         shiftNormal8h: 'Journée normale (8h)',
@@ -1034,6 +1172,24 @@
         hourlyRate: 'Hourly Rate',
         shiftCategory: 'Shift Category',
         shiftLockedNote: 'Shift category is locked after registration and cannot be switched later',
+        currentWeekShift: 'Your current shift this week',
+        currentWeekShiftNote: 'Auto-rotates every week after Sunday (Morning → Night → Afternoon)',
+        pendingTitle: 'Waiting for Admin Approval',
+        pendingBody: 'Your account has been submitted. The app will unlock automatically once approved by the administrator.',
+        refreshStatusBtn: 'Refresh Status',
+        preShiftReady: 'Clock-in starting soon',
+        startsAt: 'Starts at',
+        pastDayBanner: 'Logging a past day — pick 8h, 12h, Sunday, or custom hours freely',
+        menuHolidays: 'Public Holidays Calendar',
+        menuCheckUpdate: 'Check for Updates',
+        holidaysTitle: 'Moroccan Public Holidays Calendar',
+        holidayUpcoming: 'Upcoming',
+        holidayPassed: 'Passed',
+        upToDateToast: 'You are on the latest version',
+        updateAvailableTitle: 'Update Available!',
+        updateAvailableBody: 'A newer version of CheckDay is ready to install.',
+        downloadPayslip: 'Download Payslip',
+        payslipSubtitle: 'Detailed monthly cycle earnings summary',
         shifts: {
           normal: 'Shift Normal',
           A: 'Shift A',
@@ -1041,13 +1197,32 @@
           C: 'Shift C',
         },
         completeSetup: 'Save & Continue',
+        alreadyHaveAccount: 'Already have an account? Sign In',
         nav: {
           record: 'Record',
           history: 'History',
           wallet: 'Wallet',
           payroll: 'Payroll',
           bonuses: 'Bonuses',
+          chat: 'CheckChat',
         },
+        proBadge: 'PRO',
+        proFreeNow: 'Free Launch Promo',
+        proMonthlyUnit: 'MAD/mo',
+        proModalTitle: 'Upgrade to CheckDay Pro',
+        proModalBody: 'Unlock Salary Simulator, Executive Payslip download, WhatsApp & Excel export, Pro Home Widgets, and expanded CheckChat AI.',
+        proUnlockHint: 'Contact your administrator or subscribe via Google Play.',
+        shareWhatsapp: 'Share on WhatsApp',
+        normalExceptionToggle: 'Today Exception (Different Shift)',
+        normalExceptionNote: 'Use this if you worked Morning, Afternoon, or Night instead of Normal',
+        chatTitle: 'CheckChat',
+        chatSubtitle: 'Your smart Moroccan payroll & labor assistant',
+        chatPlaceholder: 'Ask about your net pay, CNSS, AMO, Sundays, or holidays...',
+        chatSend: 'Send',
+        chatWelcome: 'Hello! Welcome to CheckChat. Ask me anything about your 18th-to-17th cycle, CNSS/AMO, overtime, or Moroccan holidays.',
+        chatRemaining: 'Messages left today',
+        chatThinking: 'Thinking...',
+        chatError: 'Could not reach CheckChat right now. Please try again.',
         cycleLabel: 'Payroll Cycle',
         moroccoTime: 'Morocco Time',
         dayEstimate: 'Day Estimate',
@@ -1057,7 +1232,7 @@
         holidayBanner: 'Moroccan Public Holiday — double rate applied',
         fridayFlexBanner: 'Friday — adjust your exit time freely',
         saturdayFlexBanner: 'Saturday — adjust your exit time freely',
-        sundayBanner: 'Sunday — special rest-day rate applied',
+        sundayBanner: 'Sunday — fixed 430 MAD rate applied',
         shift12hBanner: '12h Shift — overtime hours included',
         chooseShift: 'Choose Day Shift',
         shiftNormal8h: 'Standard Day (8h)',
@@ -1334,6 +1509,14 @@
       const [regContract, setRegContract] = useState('CDD');
       const [regDailyRate, setRegDailyRate] = useState('143.36');
       const [regShift, setRegShift] = useState('normal');
+      const [regAnchorShift, setRegAnchorShift] = useState('morning');
+      const [showUpdateModal, setShowUpdateModal] = useState(false);
+      const [showProModal, setShowProModal] = useState(false);
+      const [normalExceptionMode, setNormalExceptionMode] = useState(false);
+      const [chatMessages, setChatMessages] = useState([]);
+      const [chatInput, setChatInput] = useState('');
+      const [chatLoading, setChatLoading] = useState(false);
+      const [chatRemaining, setChatRemaining] = useState(null);
 
       // Core Domain Data
       const [records, setRecords] = useState(() => Storage.get(KEYS.RECORDS, {}));
@@ -1407,109 +1590,115 @@
       useEffect(() => { Storage.set(KEYS.BONUSES, bonuses); }, [bonuses]);
       useEffect(() => { Storage.set(KEYS.PAYROLL, payroll); }, [payroll]);
 
-      // Silent Cloud Bootstrap & Realtime Listeners
-      useEffect(() => {
-        if (!supabaseClient) return;
-        let channels = [];
-        (async () => {
-          try {
-            const { data: cfg } = await supabaseClient.from('app_config').select('*').eq('id', 1).single();
-            if (cfg) {
-              setAppConfig(cfg);
-              Storage.set(KEYS.CONFIG, cfg);
-            }
-            const { data: hols } = await supabaseClient
-              .from('public_holidays')
-              .select('*')
-              .eq('is_active', true);
-            if (hols && hols.length) {
-              setHolidays(hols);
-              Storage.set(KEYS.HOLIDAYS, hols);
-            }
-            const { data: anns } = await supabaseClient
-              .from('announcements')
-              .select('*')
-              .eq('is_active', true)
-              .order('created_at', { ascending: false });
-            if (anns) {
-              setAnnouncements(anns);
-              Storage.set(KEYS.ANNOUNCEMENTS, anns);
-            }
+      // Live Remote Refresh Helper (Config, Holidays, Announcements, and Current User Status)
+      const refreshRemoteState = useCallback(async () => {
+        if (!supabaseClient) return null;
+        try {
+          const [cfgRes, holsRes, annsRes, sessRes] = await Promise.all([
+            supabaseClient.from('app_config').select('*').eq('id', 1).single(),
+            supabaseClient.from('public_holidays').select('*').eq('is_active', true).order('holiday_date', { ascending: true }),
+            supabaseClient.from('announcements').select('*').eq('is_active', true).order('created_at', { ascending: false }),
+            supabaseClient.auth.getSession(),
+          ]);
 
-            const { data: sess } = await supabaseClient.auth.getSession();
-            if (sess?.session?.user) {
-              const uid = sess.session.user.id;
-              const { data: prof } = await supabaseClient
-                .from('profiles')
-                .select('*')
-                .eq('id', uid)
-                .single();
-              if (prof) {
-                setProfile(prof);
-                Storage.set(KEYS.PROFILE, prof);
-                supabaseClient.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('id', uid);
+          if (cfgRes.data) {
+            setAppConfig((prev) => ({ ...prev, ...cfgRes.data }));
+            Storage.set(KEYS.CONFIG, cfgRes.data);
+          }
+          if (holsRes.data && holsRes.data.length) {
+            setHolidays(holsRes.data);
+            Storage.set(KEYS.HOLIDAYS, holsRes.data);
+          }
+          if (annsRes.data) {
+            setAnnouncements(annsRes.data);
+            Storage.set(KEYS.ANNOUNCEMENTS, annsRes.data);
+          }
+
+          const authUser = sessRes?.data?.session?.user;
+          if (authUser) {
+            const { data: prof, error: profErr } = await supabaseClient
+              .from('profiles')
+              .select('*')
+              .eq('id', authUser.id)
+              .maybeSingle();
+
+            if (prof) {
+              setProfile(prof);
+              Storage.set(KEYS.PROFILE, prof);
+              if (prof.account_status === 'approved') {
+                supabaseClient.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('id', authUser.id);
+              }
+            } else if (!profErr) {
+              // If user previously had a profile and Admin deleted it, force sign out
+              const cached = Storage.get(KEYS.PROFILE, null);
+              if (cached && cached.id === authUser.id) {
+                Storage.remove(KEYS.PROFILE);
+                setProfile(null);
+                await supabaseClient.auth.signOut();
+                setAuthStage('welcome');
               } else {
                 setAuthIdentity({
-                  id: uid,
-                  email: sess.session.user.email || '',
-                  phone: sess.session.user.phone || '',
+                  id: authUser.id,
+                  email: authUser.email || '',
+                  phone: authUser.phone || '',
                 });
                 setAuthStage('setup');
               }
             }
-
-            const annSub = supabaseClient
-              .channel('cd-announcements')
-              .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, async () => {
-                const { data } = await supabaseClient
-                  .from('announcements')
-                  .select('*')
-                  .eq('is_active', true)
-                  .order('created_at', { ascending: false });
-                if (data) {
-                  setAnnouncements(data);
-                  Storage.set(KEYS.ANNOUNCEMENTS, data);
-                }
-              })
-              .subscribe();
-
-            const cfgSub = supabaseClient
-              .channel('cd-config')
-              .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, async () => {
-                const { data } = await supabaseClient.from('app_config').select('*').eq('id', 1).single();
-                if (data) {
-                  setAppConfig(data);
-                  Storage.set(KEYS.CONFIG, data);
-                }
-              })
-              .subscribe();
-
-            channels = [annSub, cfgSub];
-            SilentSync.flush();
-          } catch {}
-        })();
-
-        return () => {
-          channels.forEach((c) => {
-            try { supabaseClient.removeChannel(c); } catch {}
-          });
-        };
+          }
+          return cfgRes.data || null;
+        } catch {
+          return null;
+        }
       }, []);
 
-      // Keep shift selection synced when selectedDate or profile changes
+      // Silent Cloud Bootstrap, Google OAuth Listener & Realtime Subscriptions
+      useEffect(() => {
+        if (!supabaseClient) return;
+        refreshRemoteState();
+        SilentSync.flush();
+
+        const { data: authListener } = supabaseClient.auth.onAuthStateChange((event, session) => {
+          if (event === 'SIGNED_IN' && session?.user) {
+            refreshRemoteState();
+          } else if (event === 'SIGNED_OUT') {
+            Storage.remove(KEYS.PROFILE);
+            setProfile(null);
+            setAuthStage('welcome');
+          }
+        });
+
+        const liveChannel = supabaseClient
+          .channel('cd-live-sync')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, () => refreshRemoteState())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, () => refreshRemoteState())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'public_holidays' }, () => refreshRemoteState())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => refreshRemoteState())
+          .subscribe();
+
+        const onVis = () => { if (document.visibilityState === 'visible') refreshRemoteState(); };
+        document.addEventListener('visibilitychange', onVis);
+        const pollId = setInterval(() => refreshRemoteState(), 20000);
+
+        return () => {
+          document.removeEventListener('visibilitychange', onVis);
+          clearInterval(pollId);
+          try { authListener?.subscription?.unsubscribe(); } catch {}
+          try { supabaseClient.removeChannel(liveChannel); } catch {}
+        };
+      }, [refreshRemoteState]);
+
+      // Keep shift selection synced with automatic weekly rotation when selectedDate or profile changes
       useEffect(() => {
         const existing = records[selectedDate];
         if (existing) {
-          setSelectedShiftType(existing.shift_type || (profile?.shift_category === 'normal' ? 'normal' : 'morning'));
+          setSelectedShiftType(existing.shift_type || getAutoRotatingShift(profile, selectedDate));
           if (existing.end_time) setNormalExitTime(existing.end_time);
           if (existing.shift_type === 'custom') setCustomHours(String(existing.hours_worked || 10));
         } else {
-          if (profile?.shift_category === 'normal') {
-            setSelectedShiftType('normal');
-            setNormalExitTime('17:30');
-          } else {
-            setSelectedShiftType('morning');
-          }
+          const autoShift = getAutoRotatingShift(profile, selectedDate);
+          setSelectedShiftType(autoShift);
+          if (autoShift === 'normal') setNormalExitTime('17:30');
         }
       }, [selectedDate, records, profile]);
 
@@ -1592,14 +1781,19 @@
           }
 
           let multiplier = 1;
+          let gross = 0;
+          const baseAmount = hours === 8 ? dailyRate : hours * hourlyRate;
+
           if (isHoliday) {
             multiplier = Number(holidayObj.multiplier || appConfig.holiday_multiplier || 2);
+            gross = Number((baseAmount * multiplier).toFixed(2));
           } else if (isSunday) {
-            multiplier = Number(appConfig.sunday_multiplier || 1.5);
+            const sundayFlat = Number(appConfig.default_sunday_rate || 430);
+            multiplier = Number((sundayFlat / Math.max(1, dailyRate)).toFixed(2));
+            gross = hours > 8 ? Number((sundayFlat + (hours - 8) * hourlyRate).toFixed(2)) : Number(sundayFlat.toFixed(2));
+          } else {
+            gross = Number(baseAmount.toFixed(2));
           }
-
-          const baseAmount = hours === 8 ? dailyRate : hours * hourlyRate;
-          const gross = Number((baseAmount * multiplier).toFixed(2));
 
           return {
             hours,
@@ -1630,7 +1824,7 @@
             try {
               await supabaseClient.auth.signInWithOAuth({
                 provider: 'google',
-                options: { redirectTo: window.location.href },
+                options: { redirectTo: window.location.origin + window.location.pathname },
               });
               return;
             } catch {}
@@ -1707,6 +1901,8 @@
           setRegDailyRate(String(appConfig.default_anapec_rate || 131.64));
         } else if (val === 'CDD' || val === 'CDI') {
           setRegDailyRate(String(appConfig.default_cdd_cdi_rate || 143.36));
+        } else if (val === 'AUTRE') {
+          setRegDailyRate(String(appConfig.default_autre_rate || 141.64));
         }
       };
 
@@ -1725,7 +1921,9 @@
           daily_rate: rate,
           hourly_rate: hourly,
           shift_category: regShift,
-          account_status: 'approved',
+          anchor_shift: regShift === 'normal' ? 'normal' : regAnchorShift,
+          anchor_week_start: getMondayOfIso(todayIso),
+          account_status: supabaseClient ? 'pending' : 'approved',
           role: 'operator',
           language: lang,
           created_at: new Date().toISOString(),
@@ -2395,11 +2593,57 @@
                     <p className="text-[11px] text-slate-500 mt-2">{t.shiftLockedNote}</p>
                   </div>
 
+                  {regShift !== 'normal' && (
+                    <div className="p-3.5 rounded-2xl bg-[#EEF2F7] space-y-2">
+                      <label className="block text-xs font-extrabold text-[#0B1D3A]">{t.currentWeekShift}</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'morning', label: t.shiftMorning },
+                          { id: 'night', label: t.shiftNight },
+                          { id: 'afternoon', label: t.shiftAfternoon },
+                        ].map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => { soundEngine.play('tap'); setRegAnchorShift(s.id); }}
+                            className={`py-2.5 px-2 rounded-xl text-[11px] font-extrabold border transition active:scale-[0.97] ${
+                              regAnchorShift === s.id
+                                ? 'bg-[#00C29A] text-[#0B1D3A] border-[#00C29A]'
+                                : 'bg-white text-[#0B1D3A] border-slate-200'
+                            }`}
+                          >
+                            {s.label.split(' ')[0]}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-relaxed">{t.currentWeekShiftNote}</p>
+                    </div>
+                  )}
+
                   <button
                     type="submit"
                     className="w-full py-3.5 rounded-2xl bg-[#00C29A] text-[#0B1D3A] font-extrabold text-sm shadow-md active:scale-[0.97] transition"
                   >
                     {t.completeSetup}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      runWithLoader(async () => {
+                        if (supabaseClient) {
+                          try { await supabaseClient.auth.signOut(); } catch {}
+                        }
+                        setAuthIdentity({ id: '', email: '', phone: '' });
+                        setPhoneMode('login');
+                        setPhoneAuthError('');
+                        setAuthStage('welcome');
+                      }, 'tap');
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-[#EEF2F7] text-[#0B1D3A] text-xs font-extrabold flex items-center justify-center gap-2 active:scale-[0.97] transition"
+                  >
+                    <i className="fi fi-sr-sign-in-alt text-[#00C29A]"></i>
+                    <span>{t.alreadyHaveAccount}</span>
                   </button>
                 </form>
               )}
@@ -2413,6 +2657,36 @@
                 </div>
               </div>
             )}
+          </div>
+        );
+      }
+
+      // Pending Admin Approval Guard
+      if (profile.account_status === 'pending') {
+        return (
+          <div className={`min-h-screen flex items-center justify-center p-6 bg-[#EEF2F7] ${t.fontClass}`} dir={t.dir}>
+            <div className="fintech-card max-w-sm w-full p-8 text-center animate-fade-up space-y-4">
+              <div className="flex justify-center"><CheckDayLogo size={50} showWordmark={false} /></div>
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                <i className="fi fi-sr-hourglass-end text-2xl"></i>
+              </div>
+              <h1 className="text-lg font-extrabold text-[#0B1D3A]">{t.pendingTitle}</h1>
+              <p className="text-xs text-slate-500 leading-relaxed">{t.pendingBody}</p>
+              <div className="flex flex-col gap-2 pt-2">
+                <button
+                  onClick={() => runWithLoader(() => refreshRemoteState(), 'tap')}
+                  className="w-full py-3 rounded-2xl bg-[#00C29A] text-[#0B1D3A] text-xs font-extrabold active:scale-[0.97]"
+                >
+                  {t.refreshStatusBtn}
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="w-full py-2.5 rounded-2xl bg-[#EEF2F7] text-slate-600 text-xs font-bold active:scale-[0.97]"
+                >
+                  {t.logoutBtn}
+                </button>
+              </div>
+            </div>
           </div>
         );
       }
@@ -2445,6 +2719,160 @@
       const selectedDow = getDayOfWeek(selectedDate);
       const isNormalCategory = profile.shift_category === 'normal';
       const activeAnnouncement = announcements[0] || null;
+      const currentAutoShift = getAutoRotatingShift(profile, todayIso);
+      const preShiftInfo = getPreShiftInfo(nowMa, currentAutoShift);
+      const shiftLabelMap = {
+        normal: t.shiftNormal8h,
+        morning: t.shiftMorning,
+        afternoon: t.shiftAfternoon,
+        night: t.shiftNight,
+      };
+
+      const handleCheckForUpdates = () => {
+        setDrawerOpen(false);
+        runWithLoader(async () => {
+          const latest = (await refreshRemoteState()) || appConfig;
+          if (latest.force_update || compareVersions(latest.min_version, APP_VERSION) > 0) {
+            setShowUpdateModal(true);
+          } else {
+            showToast(`${t.upToDateToast} (v${APP_VERSION})`);
+          }
+        }, 'tap');
+      };
+
+      const handleDownloadPayslipFile = () => {
+        soundEngine.play('success');
+        const htmlContent = `<!DOCTYPE html><html lang="${lang}" dir="${t.dir}"><head><meta charset="UTF-8"><title>CheckDay ${t.payslipTitle}</title>
+<style>body{font-family:system-ui,-apple-system,sans-serif;background:#EEF2F7;color:#0B1D3A;padding:24px;margin:0}
+.card{max-width:560px;margin:0 auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 12px 32px rgba(11,29,58,.1)}
+.head{background:linear-gradient(135deg,#0B1D3A,#163466,#0D525E);color:#fff;padding:24px;display:flex;justify-content:space-between;align-items:center}
+.body{padding:24px}.row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #eef2f7;font-size:14px}
+.net{background:#0B1D3A;color:#6EE7D2;padding:16px 20px;border-radius:14px;display:flex;justify-content:space-between;font-size:18px;font-weight:800;margin-top:16px}
+.num{direction:ltr;unicode-bidi:isolate;font-family:monospace;font-weight:700}</style></head>
+<body><div class="card"><div class="head"><div><h2 style="margin:0">CheckDay</h2><div style="font-size:12px;opacity:.8">${t.payslipTitle}</div></div><div class="num">${cycle.startIso} → ${cycle.endIso}</div></div>
+<div class="body"><div class="row"><span>${t.fullName}</span><strong>${profile.full_name}</strong></div>
+<div class="row"><span>${t.matricule}</span><span class="num">#${profile.matricule}</span></div>
+<div class="row"><span>${t.shiftCategory}</span><strong>${t.shifts[profile.shift_category]}</strong></div>
+<div class="row"><span>${t.catHoliday}</span><span class="num">${fmtMoney(walletStats.holidaySum, t.currency)}</span></div>
+<div class="row"><span>${t.catSunday}</span><span class="num">${fmtMoney(walletStats.sundaySum, t.currency)}</span></div>
+<div class="row"><span>${t.catLong}</span><span class="num">${fmtMoney(walletStats.longSum, t.currency)}</span></div>
+<div class="row"><span>${t.catNormal}</span><span class="num">${fmtMoney(walletStats.normalSum, t.currency)}</span></div>
+<div class="row"><span>${t.bonusesReceived}</span><span class="num" style="color:#009E7D">+${fmtMoney(walletStats.bonusesReceived, t.currency)}</span></div>
+<div class="row"><span>${t.cnssDeduction}</span><span class="num" style="color:#e11d48">-${fmtMoney(payrollCalc.cnssDed, t.currency)}</span></div>
+<div class="row"><span>${t.amoDeduction}</span><span class="num" style="color:#e11d48">-${fmtMoney(payrollCalc.amoDed, t.currency)}</span></div>
+<div class="row"><span>${t.advanceDeduction}</span><span class="num" style="color:#e11d48">-${fmtMoney(payrollCalc.advanceDed, t.currency)}</span></div>
+<div class="net"><span>${t.netToPay}</span><span class="num">${fmtMoney(payrollCalc.netToPay, t.currency)}</span></div>
+</div></div></body></html>`;
+        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `CheckDay_Payslip_${cycle.cycleKey}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        showToast(t.savedToast);
+      };
+
+      const isPaidProUser = Boolean(
+        profile && (
+          profile.plan === 'vip' ||
+          (profile.plan === 'pro' && (!profile.pro_expires_at || new Date(profile.pro_expires_at) > new Date()))
+        )
+      );
+
+      const isFreeLaunch = Boolean(appConfig.free_launch_mode !== false);
+      const proPrice = Number(appConfig.pro_monthly_price_mad || 19);
+
+      const canUseFeature = (featureKey) => {
+        const proMap = appConfig.pro_features || {};
+        if (!proMap[featureKey]) return true;
+        return isPaidProUser || isFreeLaunch;
+      };
+
+      const requireProOrRun = (featureKey, fn) => {
+        if (canUseFeature(featureKey)) {
+          fn();
+        } else {
+          soundEngine.play('absent');
+          setShowProModal(true);
+        }
+      };
+
+      const handleShareWhatsApp = () => {
+        requireProOrRun('whatsapp_export', () => {
+          soundEngine.play('success');
+          const lines = [
+            `*CheckDay — ${t.payslipTitle}*`,
+            `${profile.full_name} (#${profile.matricule})`,
+            `${t.cycleLabel}: ${cycle.startIso} → ${cycle.endIso}`,
+            `${t.totalGross}: ${fmtMoney(payrollCalc.totalGross, t.currency)}`,
+            `${t.cnssDeduction}: -${fmtMoney(payrollCalc.cnssDed, t.currency)}`,
+            `${t.amoDeduction}: -${fmtMoney(payrollCalc.amoDed, t.currency)}`,
+            `${t.advanceDeduction}: -${fmtMoney(payrollCalc.advanceDed, t.currency)}`,
+            `*${t.netToPay}: ${fmtMoney(payrollCalc.netToPay, t.currency)}*`,
+          ].join('\n');
+          window.open(`https://wa.me/?text=${encodeURIComponent(lines)}`, '_blank', 'noopener,noreferrer');
+        });
+      };
+
+      const handleSendChat = async (e) => {
+        e.preventDefault();
+        const msg = chatInput.trim();
+        if (!msg || chatLoading) return;
+        soundEngine.play('tap');
+        setChatInput('');
+        setChatMessages((prev) => [...prev, { role: 'user', text: msg }]);
+        setChatLoading(true);
+
+        try {
+          let token = '';
+          if (supabaseClient) {
+            const { data } = await supabaseClient.auth.getSession();
+            token = data?.session?.access_token || '';
+          }
+          if (!token) {
+            setChatMessages((prev) => [...prev, { role: 'ai', text: t.chatError }]);
+            setChatLoading(false);
+            return;
+          }
+          const resp = await fetch(CHECKCHAT_API_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              message: msg,
+              lang,
+              workerContext: {
+                shift_category: profile.shift_category,
+                contract_type: profile.contract_type,
+                daily_rate: payroll.daily_rate,
+                cycle_gross: payrollCalc.totalGross,
+                cycle_net: payrollCalc.netToPay,
+              },
+            }),
+          });
+          const data = await resp.json();
+          if (!resp.ok) {
+            if (resp.status === 429) {
+              setShowProModal(true);
+            }
+            const errMsg = data.detail ? `${data.error}: ${data.detail}` : (data.error || t.chatError);
+            setChatMessages((prev) => [...prev, { role: 'ai', text: errMsg }]);
+          } else {
+            soundEngine.play('success');
+            if (typeof data.remaining_today === 'number') setChatRemaining(data.remaining_today);
+            setChatMessages((prev) => [...prev, { role: 'ai', text: data.reply }]);
+          }
+        } catch {
+          setChatMessages((prev) => [...prev, { role: 'ai', text: t.chatError }]);
+        } finally {
+          setChatLoading(false);
+        }
+      };
 
       return (
         <div className={`min-h-screen bg-[#EEF2F7] pb-28 ${t.fontClass}`} dir={t.dir}>
@@ -2689,6 +3117,46 @@
               <FaqScreen t={t} onClose={() => { soundEngine.play('tap'); setActiveOverlayScreen(null); }} />
             )}
 
+            {activeOverlayScreen === 'holidays' && (
+              <div className="space-y-4 animate-fade-up">
+                <div className="flex items-center justify-between">
+                  <h1 className="text-lg font-extrabold text-[#0B1D3A]">{t.holidaysTitle}</h1>
+                  <button
+                    onClick={() => { soundEngine.play('tap'); setActiveOverlayScreen(null); }}
+                    className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-[#0B1D3A] active:scale-[0.97]"
+                  >
+                    {t.backBtn}
+                  </button>
+                </div>
+                <div className="space-y-2.5">
+                  {holidays.map((h, i) => {
+                    const isUpcoming = h.holiday_date >= todayIso;
+                    return (
+                      <div key={h.id || i} className="fintech-card p-4 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${isUpcoming ? 'bg-emerald-50 text-[#009E7D]' : 'bg-slate-100 text-slate-400'}`}>
+                            <i className="fi fi-sr-calendar-star text-lg"></i>
+                          </div>
+                          <div>
+                            <div className="text-xs font-extrabold text-[#0B1D3A]">{getHolidayName(h)}</div>
+                            <LtrNum className="text-[11px] font-bold text-slate-500 mt-0.5">{h.holiday_date}</LtrNum>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold">
+                            ×{h.multiplier || 2}
+                          </span>
+                          <span className={`text-[10px] font-bold ${isUpcoming ? 'text-[#009E7D]' : 'text-slate-400'}`}>
+                            {isUpcoming ? t.holidayUpcoming : t.holidayPassed}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {activeOverlayScreen === 'about' && (
               <div className="space-y-4 animate-fade-up">
                 <div className="flex items-center justify-between">
@@ -2755,7 +3223,18 @@
                         <span className="px-2.5 py-0.5 rounded-full bg-[#00C29A]/25 text-[#6EE7D2] font-bold">
                           {t.shifts[profile.shift_category]}
                         </span>
+                        {!isNormalCategory && (
+                          <span className="px-2.5 py-0.5 rounded-full bg-white/15 text-white font-bold">
+                            {shiftLabelMap[currentAutoShift]}
+                          </span>
+                        )}
                       </div>
+                      {preShiftInfo.isPreShiftWindow && (
+                        <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#00C29A] text-[#0B1D3A] text-[10px] font-extrabold animate-pulse">
+                          <i className="fi fi-sr-bell-ring"></i>
+                          <span>{t.preShiftReady} · {t.startsAt} <LtrNum>{preShiftInfo.startLabel}</LtrNum></span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="text-end shrink-0">
@@ -2781,6 +3260,12 @@
                 </div>
 
                 {/* Smart Auto-Detection Banners */}
+                {selectedDate < todayIso && (
+                  <div className="rounded-2xl px-4 py-3 bg-slate-100 border border-slate-200 text-[#0B1D3A] text-xs font-bold flex items-center gap-2.5">
+                    <i className="fi fi-sr-time-past text-[#009E7D] text-base"></i>
+                    <span>{t.pastDayBanner}</span>
+                  </div>
+                )}
                 {dayPreview.isHoliday && (
                   <div className="rounded-2xl px-4 py-3 bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs font-bold flex items-center gap-2.5">
                     <i className="fi fi-sr-star text-[#00C29A] text-base"></i>
@@ -2891,6 +3376,43 @@
                     <div className="grid grid-cols-2 gap-2.5">
                       {isNormalCategory ? (
                         <>
+                          <div className="col-span-2 flex items-center justify-between p-2.5 rounded-2xl bg-[#EEF2F7] mb-1">
+                            <div>
+                              <div className="text-[11px] font-extrabold text-[#0B1D3A]">{t.normalExceptionToggle}</div>
+                              <div className="text-[10px] text-slate-500">{t.normalExceptionNote}</div>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={normalExceptionMode}
+                              onChange={(e) => {
+                                soundEngine.play('tap');
+                                setNormalExceptionMode(e.target.checked);
+                                if (!e.target.checked) setSelectedShiftType('normal');
+                              }}
+                              className="w-5 h-5 accent-[#00C29A]"
+                            />
+                          </div>
+                          {normalExceptionMode && (
+                            <>
+                              {[
+                                { id: 'morning', label: t.shiftMorning },
+                                { id: 'afternoon', label: t.shiftAfternoon },
+                                { id: 'night', label: t.shiftNight },
+                              ].map((ex) => (
+                                <button
+                                  key={ex.id}
+                                  onClick={() => { soundEngine.play('tap'); setSelectedShiftType(ex.id); }}
+                                  className={`p-3 rounded-2xl border text-start transition active:scale-[0.97] ${
+                                    selectedShiftType === ex.id
+                                      ? 'bg-[#00C29A] text-[#0B1D3A] border-[#00C29A]'
+                                      : 'bg-emerald-50/70 text-[#0B1D3A] border-emerald-200'
+                                  }`}
+                                >
+                                  <div className="text-xs font-extrabold">{ex.label}</div>
+                                </button>
+                              ))}
+                            </>
+                          )}
                           <button
                             onClick={() => { soundEngine.play('tap'); setSelectedShiftType('normal'); }}
                             className={`p-3 rounded-2xl border text-start transition active:scale-[0.97] ${
@@ -3312,11 +3834,11 @@
                 <div className="flex items-center justify-between gap-2">
                   <h1 className="text-lg font-extrabold text-[#0B1D3A]">{t.payrollTitle}</h1>
                   <button
-                    onClick={() => runWithLoader(() => setActiveOverlayScreen('simulator'), 'nav')}
+                    onClick={() => requireProOrRun('simulator', () => runWithLoader(() => setActiveOverlayScreen('simulator'), 'nav'))}
                     className="px-3.5 py-2 rounded-xl bg-[#0B1D3A] text-white text-xs font-extrabold flex items-center gap-1.5 active:scale-[0.97]"
                   >
                     <i className="fi fi-sr-calculator text-[#00C29A]"></i>
-                    <span>{t.openSimulator}</span>
+                    <span>{t.openSimulator}</span><span className="px-1.5 py-0.5 rounded-md bg-amber-400 text-[#0B1D3A] text-[9px] font-black">{t.proBadge}</span>
                   </button>
                 </div>
 
@@ -3577,6 +4099,70 @@
                 )}
               </div>
             )}
+            {/* ===============================================================
+                TAB 6: CHECKCHAT (DINARO) AI ASSISTANT
+               =============================================================== */}
+            {!activeOverlayScreen && activeTab === 'chat' && (
+              <div className="space-y-3 animate-fade-up">
+                <div className="hero-gradient rounded-[24px] p-5 text-white shadow-hero flex items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h1 className="text-base font-extrabold">{t.chatTitle}</h1>
+                      <span className="px-2 py-0.5 rounded-full bg-amber-400 text-[#0B1D3A] text-[9px] font-black">{t.proBadge}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-0.5">{t.chatSubtitle}</p>
+                  </div>
+                  {chatRemaining !== null && (
+                    <div className="text-end shrink-0">
+                      <div className="text-[10px] text-slate-300">{t.chatRemaining}</div>
+                      <LtrNum className="text-sm font-extrabold text-[#6EE7D2]">{chatRemaining}</LtrNum>
+                    </div>
+                  )}
+                </div>
+
+                {/* Chat Messages */}
+                <div className="fintech-card p-4 space-y-3 min-h-[300px] max-h-[420px] overflow-y-auto">
+                  <div className="p-3.5 rounded-2xl bg-[#EEF2F7] text-[#0B1D3A] text-xs leading-relaxed font-semibold">
+                    {t.chatWelcome}
+                  </div>
+                  {chatMessages.map((m, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-3.5 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap ${
+                        m.role === 'user'
+                          ? 'bg-[#0B1D3A] text-white ms-8 font-semibold'
+                          : 'bg-emerald-50 border border-emerald-200/70 text-[#0B1D3A] me-6 font-medium'
+                      }`}
+                    >
+                      {m.text}
+                    </div>
+                  ))}
+                  {chatLoading && (
+                    <div className="p-3 rounded-2xl bg-[#EEF2F7] text-slate-500 text-xs font-bold animate-pulse">
+                      {t.chatThinking}
+                    </div>
+                  )}
+                </div>
+
+                {/* Chat Input */}
+                <form onSubmit={handleSendChat} className="fintech-card p-2 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder={t.chatPlaceholder}
+                    className="flex-1 px-3 py-2.5 bg-transparent text-xs font-semibold focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    disabled={chatLoading || !chatInput.trim()}
+                    className="px-4 py-2.5 rounded-2xl bg-[#00C29A] text-[#0B1D3A] text-xs font-extrabold active:scale-[0.97] disabled:opacity-50"
+                  >
+                    {t.chatSend}
+                  </button>
+                </form>
+              </div>
+            )}
           </main>
 
           {/* =================================================================
@@ -3592,6 +4178,7 @@
               { id: 'wallet', icon: 'fi-sr-wallet', label: t.nav.wallet },
               { id: 'payroll', icon: 'fi-sr-money-check-edit', label: t.nav.payroll },
               { id: 'bonuses', icon: 'fi-sr-gift', label: t.nav.bonuses },
+              { id: 'chat', icon: 'fi-sr-comment-alt', label: t.nav.chat },
             ].map((item) => {
               const isActive = !activeOverlayScreen && activeTab === item.id;
               return (
@@ -3641,6 +4228,22 @@
                     </button>
                   </div>
 
+                  {/* CheckDay Pro Promo Banner */}
+                  <div className="hero-gradient rounded-2xl p-3.5 text-white space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold">CheckDay {t.proBadge}</span>
+                      <span className="px-2 py-0.5 rounded-full bg-amber-400 text-[#0B1D3A] text-[9px] font-black">
+                        {isPaidProUser ? t.proBadge : isFreeLaunch ? t.proFreeNow : `${proPrice} ${t.proMonthlyUnit}`}
+                      </span>
+                    </div>
+                    {isFreeLaunch && !isPaidProUser && (
+                      <div className="text-[11px] text-[#6EE7D2] font-bold">
+                        <span className="line-through opacity-60 me-1.5"><LtrNum>{proPrice} {t.proMonthlyUnit}</LtrNum></span>
+                        <span>0 {t.currency}</span>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Profile Pill (Locked Shift Display) */}
                   <div className="p-3.5 rounded-2xl bg-[#EEF2F7] space-y-1">
                     <div className="text-sm font-extrabold text-[#0B1D3A]">{profile.full_name}</div>
@@ -3667,12 +4270,34 @@
                     <button
                       onClick={() => {
                         setDrawerOpen(false);
+                        runWithLoader(() => setActiveOverlayScreen('holidays'), 'nav');
+                      }}
+                      className="w-full p-3 rounded-2xl bg-[#EEF2F7]/70 hover:bg-[#EEF2F7] flex items-center gap-3 text-xs font-extrabold text-[#0B1D3A] active:scale-[0.98]"
+                    >
+                      <i className="fi fi-sr-calendar-star text-[#00C29A] text-base"></i>
+                      <span>{t.menuHolidays}</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setDrawerOpen(false);
                         runWithLoader(() => setActiveOverlayScreen('faq'), 'nav');
                       }}
                       className="w-full p-3 rounded-2xl bg-[#EEF2F7]/70 hover:bg-[#EEF2F7] flex items-center gap-3 text-xs font-extrabold text-[#0B1D3A] active:scale-[0.98]"
                     >
                       <i className="fi fi-sr-interrogation text-[#00C29A] text-base"></i>
                       <span>{t.menuFaq}</span>
+                    </button>
+
+                    <button
+                      onClick={handleCheckForUpdates}
+                      className="w-full p-3 rounded-2xl bg-[#EEF2F7]/70 hover:bg-[#EEF2F7] flex items-center justify-between text-xs font-extrabold text-[#0B1D3A] active:scale-[0.98]"
+                    >
+                      <span className="flex items-center gap-3">
+                        <i className="fi fi-sr-refresh text-[#00C29A] text-base"></i>
+                        <span>{t.menuCheckUpdate}</span>
+                      </span>
+                      <LtrNum className="text-[10px] text-slate-400">v{APP_VERSION}</LtrNum>
                     </button>
 
                     <button
@@ -3687,7 +4312,7 @@
                     </button>
 
                     <button
-                      onClick={handleExportExcel}
+                      onClick={() => requireProOrRun('excel_export', handleExportExcel)}
                       className="w-full p-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 flex items-center gap-3 text-xs font-extrabold text-emerald-900 active:scale-[0.98]"
                     >
                       <i className="fi fi-sr-file-excel text-[#009E7D] text-base"></i>
@@ -3824,66 +4449,149 @@
           )}
 
           {/* =================================================================
-              PRINTABLE PAYSLIP MODAL
+              UPGRADED EXECUTIVE PAYSLIP MODAL (Download + Print)
              ================================================================= */}
           {showPayslip && (
+            <div className="fixed inset-0 z-50 bg-[#0B1D3A]/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+              <div id="printable-payslip" className="bg-white rounded-[24px] max-w-md w-full overflow-hidden shadow-2xl animate-fade-up my-auto">
+                {/* Executive Header */}
+                <div className="hero-gradient p-5 text-white flex items-center justify-between gap-3">
+                  <div>
+                    <CheckDayLogo size={30} light />
+                    <div className="text-[11px] text-[#6EE7D2] font-bold mt-1">{t.payslipSubtitle}</div>
+                  </div>
+                  <div className="text-end">
+                    <div className="text-[10px] text-slate-300">{t.cycleLabel}</div>
+                    <LtrNum className="text-xs font-bold text-white">{cycle.startIso} → {cycle.endIso}</LtrNum>
+                  </div>
+                </div>
+
+                <div className="p-5 space-y-4">
+                  {/* Worker Identity Box */}
+                  <div className="p-3.5 rounded-2xl bg-[#EEF2F7] flex items-center justify-between gap-2 text-xs">
+                    <div>
+                      <div className="font-extrabold text-[#0B1D3A] text-sm">{profile.full_name}</div>
+                      <div className="text-slate-500 mt-0.5">
+                        {t.contracts[profile.contract_type]} · {t.shifts[profile.shift_category]}
+                      </div>
+                    </div>
+                    <LtrNum className="px-2.5 py-1 rounded-xl bg-white font-extrabold text-[#0B1D3A] shadow-xs">
+                      #{profile.matricule}
+                    </LtrNum>
+                  </div>
+
+                  {/* Itemized Earnings & Deductions */}
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500">{t.catHoliday} (<LtrNum>{walletStats.holidayDays}</LtrNum>)</span>
+                      <LtrNum className="font-bold text-[#0B1D3A]">{fmtMoney(walletStats.holidaySum, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500">{t.catSunday} (<LtrNum>{walletStats.sundayDays}</LtrNum>)</span>
+                      <LtrNum className="font-bold text-[#0B1D3A]">{fmtMoney(walletStats.sundaySum, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500">{t.catLong} (<LtrNum>{walletStats.longDays}</LtrNum>)</span>
+                      <LtrNum className="font-bold text-[#0B1D3A]">{fmtMoney(walletStats.longSum, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500">{t.catNormal} (<LtrNum>{walletStats.normalDays}</LtrNum>)</span>
+                      <LtrNum className="font-bold text-[#0B1D3A]">{fmtMoney(walletStats.normalSum, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500">{t.bonusesReceived}</span>
+                      <LtrNum className="font-bold text-[#009E7D]">+{fmtMoney(walletStats.bonusesReceived, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500">{t.cnssDeduction}</span>
+                      <LtrNum className="font-bold text-rose-600">-{fmtMoney(payrollCalc.cnssDed, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-100">
+                      <span className="text-slate-500">{t.amoDeduction}</span>
+                      <LtrNum className="font-bold text-rose-600">-{fmtMoney(payrollCalc.amoDed, t.currency)}</LtrNum>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-slate-500">{t.advanceDeduction}</span>
+                      <LtrNum className="font-bold text-rose-600">-{fmtMoney(payrollCalc.advanceDed, t.currency)}</LtrNum>
+                    </div>
+                  </div>
+
+                  {/* Highlighted Net to Pay Box */}
+                  <div className="rounded-2xl bg-[#0B1D3A] text-white p-4 flex items-center justify-between">
+                    <span className="text-xs font-extrabold">{t.netToPay}</span>
+                    <LtrNum className="text-xl font-extrabold text-[#6EE7D2]">
+                      {fmtMoney(payrollCalc.netToPay, t.currency)}
+                    </LtrNum>
+                  </div>
+
+                  {/* Actions: Download + Print + WhatsApp Share + Close */}
+                  <div className="grid grid-cols-2 gap-2 no-print">
+                    <button
+                      type="button"
+                      onClick={handleShareWhatsApp}
+                      className="col-span-2 py-3 rounded-2xl bg-emerald-600 text-white text-xs font-extrabold flex items-center justify-center gap-2 active:scale-[0.97]"
+                    >
+                      <i className="fi fi-sr-paper-plane"></i>
+                      <span>{t.shareWhatsapp}</span>
+                      <span className="px-1.5 py-0.5 rounded-md bg-amber-400 text-[#0B1D3A] text-[9px] font-black">{t.proBadge}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadPayslipFile}
+                      className="py-3 rounded-2xl bg-[#00C29A] text-[#0B1D3A] text-xs font-extrabold flex items-center justify-center gap-1.5 active:scale-[0.97]"
+                    >
+                      <i className="fi fi-sr-download"></i>
+                      <span>{t.downloadPayslip}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { soundEngine.play('tap'); try { window.print(); } catch {} }}
+                      className="py-3 rounded-2xl bg-[#0B1D3A] text-white text-xs font-extrabold flex items-center justify-center gap-1.5 active:scale-[0.97]"
+                    >
+                      <i className="fi fi-sr-print text-[#00C29A]"></i>
+                      <span>{t.printNow}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowPayslip(false)}
+                      className="col-span-2 py-2.5 rounded-2xl bg-[#EEF2F7] text-[#0B1D3A] text-xs font-bold active:scale-[0.97]"
+                    >
+                      {t.closeBtn}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* UPDATE AVAILABLE MODAL */}
+          {showUpdateModal && (
             <div className="fixed inset-0 z-50 bg-[#0B1D3A]/55 backdrop-blur-xs flex items-center justify-center p-4">
-              <div id="printable-payslip" className="fintech-card max-w-md w-full p-6 space-y-4 animate-fade-up">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-                  <CheckDayLogo size={30} />
-                  <LtrNum className="text-xs font-bold text-slate-500">
-                    {cycle.startIso} → {cycle.endIso}
-                  </LtrNum>
+              <div className="fintech-card max-w-xs w-full p-6 text-center space-y-4 animate-fade-up">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-[#00C29A] flex items-center justify-center mx-auto">
+                  <i className="fi fi-sr-rocket-lunch text-2xl"></i>
                 </div>
-
-                <div className="text-center">
-                  <h3 className="text-base font-extrabold text-[#0B1D3A]">{t.payslipTitle}</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {profile.full_name} · <LtrNum>#{profile.matricule}</LtrNum> · {t.shifts[profile.shift_category]}
-                  </p>
-                </div>
-
-                <div className="space-y-2 text-xs border-y border-slate-100 py-3">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">{t.grossWork}</span>
-                    <LtrNum className="font-bold">{fmtMoney(walletStats.grossWork, t.currency)}</LtrNum>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">{t.bonusesReceived}</span>
-                    <LtrNum className="font-bold text-emerald-700">+{fmtMoney(walletStats.bonusesReceived, t.currency)}</LtrNum>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">{t.cnssDeduction}</span>
-                    <LtrNum className="font-bold text-rose-600">-{fmtMoney(payrollCalc.cnssDed, t.currency)}</LtrNum>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">{t.amoDeduction}</span>
-                    <LtrNum className="font-bold text-rose-600">-{fmtMoney(payrollCalc.amoDed, t.currency)}</LtrNum>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">{t.advanceDeduction}</span>
-                    <LtrNum className="font-bold text-rose-600">-{fmtMoney(payrollCalc.advanceDed, t.currency)}</LtrNum>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-slate-100 text-sm font-extrabold">
-                    <span className="text-[#0B1D3A]">{t.netToPay}</span>
-                    <LtrNum className="text-[#009E7D]">{fmtMoney(payrollCalc.netToPay, t.currency)}</LtrNum>
-                  </div>
-                </div>
-
-                <div className="flex gap-2.5 no-print">
-                  <button
-                    onClick={() => window.print()}
-                    className="flex-1 py-3 rounded-2xl bg-[#0B1D3A] text-white text-xs font-extrabold active:scale-[0.97]"
+                <h3 className="text-base font-extrabold text-[#0B1D3A]">{t.updateAvailableTitle}</h3>
+                <p className="text-xs text-slate-500">
+                  {t.updateAvailableBody} (<LtrNum>v{appConfig.min_version}</LtrNum>)
+                </p>
+                {appConfig.update_url && (
+                  <a
+                    href={appConfig.update_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block w-full py-3 rounded-2xl bg-[#00C29A] text-[#0B1D3A] text-xs font-extrabold"
                   >
-                    {t.printNow}
-                  </button>
-                  <button
-                    onClick={() => setShowPayslip(false)}
-                    className="px-4 py-3 rounded-2xl bg-[#EEF2F7] text-[#0B1D3A] text-xs font-bold active:scale-[0.97]"
-                  >
-                    {t.closeBtn}
-                  </button>
-                </div>
+                    {t.updateNow}
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowUpdateModal(false)}
+                  className="w-full py-2 text-xs font-bold text-slate-500"
+                >
+                  {t.closeBtn}
+                </button>
               </div>
             </div>
           )}
@@ -3896,6 +4604,30 @@
               <div className="bg-white/95 rounded-3xl px-7 py-6 shadow-2xl flex flex-col items-center gap-3">
                 <div className="loader-ring"><CheckDayLogo size={46} showWordmark={false} /></div>
                 <span className="text-xs font-bold text-[#0B1D3A]">{t.loading}</span>
+              </div>
+            </div>
+          )}
+
+          {/* CHECKDAY PRO UPGRADE MODAL */}
+          {showProModal && (
+            <div className="fixed inset-0 z-50 bg-[#0B1D3A]/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="fintech-card max-w-xs w-full p-6 text-center space-y-4 animate-fade-up">
+                <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                  <i className="fi fi-sr-crown text-2xl"></i>
+                </div>
+                <h3 className="text-base font-extrabold text-[#0B1D3A]">{t.proModalTitle}</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">{t.proModalBody}</p>
+                <div className="p-3 rounded-2xl bg-[#EEF2F7] font-extrabold text-[#0B1D3A] text-sm">
+                  <LtrNum>{proPrice} {t.proMonthlyUnit}</LtrNum>
+                </div>
+                <p className="text-[11px] text-slate-500">{t.proUnlockHint}</p>
+                <button
+                  type="button"
+                  onClick={() => setShowProModal(false)}
+                  className="w-full py-3 rounded-2xl bg-[#0B1D3A] text-white text-xs font-extrabold"
+                >
+                  {t.closeBtn}
+                </button>
               </div>
             </div>
           )}
